@@ -19,6 +19,18 @@ async function getCurrentUserId(): Promise<string> {
   return user.id;
 }
 
+async function withSyncStatus<T>(operation: () => Promise<T>): Promise<T> {
+  setSyncStatus('syncing');
+  try {
+    const result = await operation();
+    setSyncStatus('synced');
+    return result;
+  } catch (err) {
+    setSyncStatus('error');
+    throw err;
+  }
+}
+
 // =============================================
 // Tasks
 // =============================================
@@ -32,8 +44,7 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
     return buildTaskTree(cached);
   }
 
-  setSyncStatus('syncing');
-  try {
+  return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
     const { data, error } = await supabase
       .from('tasks')
@@ -64,12 +75,8 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
     }
 
     await taskCache.set(date, tasks);
-    setSyncStatus('synced');
     return buildTaskTree(tasks);
-  } catch (err) {
-    setSyncStatus('error');
-    throw err;
-  }
+  });
 }
 
 async function revalidateTasksByDate(date: string): Promise<void> {
@@ -104,8 +111,7 @@ async function revalidateTasksByDate(date: string): Promise<void> {
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task> {
-  setSyncStatus('syncing');
-  try {
+  return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
     const { data, error } = await supabase
       .from('tasks')
@@ -123,17 +129,12 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
     if (error) throw error;
 
     await taskCache.invalidate();
-    setSyncStatus('synced');
     return data;
-  } catch (err) {
-    setSyncStatus('error');
-    throw err;
-  }
+  });
 }
 
 export async function updateTask(id: string, updates: UpdateTaskInput): Promise<Task> {
-  setSyncStatus('syncing');
-  try {
+  return withSyncStatus(async () => {
     const { data, error } = await supabase
       .from('tasks')
       .update(updates)
@@ -144,17 +145,12 @@ export async function updateTask(id: string, updates: UpdateTaskInput): Promise<
     if (error) throw error;
 
     await taskCache.invalidate();
-    setSyncStatus('synced');
     return data;
-  } catch (err) {
-    setSyncStatus('error');
-    throw err;
-  }
+  });
 }
 
 export async function deleteTask(id: string): Promise<void> {
-  setSyncStatus('syncing');
-  try {
+  return withSyncStatus(async () => {
     const { error } = await supabase
       .from('tasks')
       .delete()
@@ -163,16 +159,11 @@ export async function deleteTask(id: string): Promise<void> {
     if (error) throw error;
 
     await taskCache.invalidate();
-    setSyncStatus('synced');
-  } catch (err) {
-    setSyncStatus('error');
-    throw err;
-  }
+  });
 }
 
 export async function completeTask(id: string): Promise<void> {
-  setSyncStatus('syncing');
-  try {
+  return withSyncStatus(async () => {
     // Fetch all progress logs for this task
     const { data: logs } = await supabase
       .from('progress_logs')
@@ -216,16 +207,11 @@ export async function completeTask(id: string): Promise<void> {
     if (error) throw error;
 
     await taskCache.invalidate();
-    setSyncStatus('synced');
-  } catch (err) {
-    setSyncStatus('error');
-    throw err;
-  }
+  });
 }
 
 export async function discardTask(id: string): Promise<void> {
-  setSyncStatus('syncing');
-  try {
+  return withSyncStatus(async () => {
     const { error } = await supabase
       .from('tasks')
       .update({
@@ -237,11 +223,7 @@ export async function discardTask(id: string): Promise<void> {
     if (error) throw error;
 
     await taskCache.invalidate();
-    setSyncStatus('synced');
-  } catch (err) {
-    setSyncStatus('error');
-    throw err;
-  }
+  });
 }
 
 // =============================================
@@ -270,8 +252,7 @@ export async function fetchProgressLogs(taskId: string): Promise<ProgressLog[]> 
 }
 
 export async function upsertProgressLog(input: UpsertProgressLogInput): Promise<ProgressLog> {
-  setSyncStatus('syncing');
-  try {
+  return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
 
     const { data, error } = await supabase
@@ -308,12 +289,8 @@ export async function upsertProgressLog(input: UpsertProgressLogInput): Promise<
       await taskCache.invalidate();
     }
 
-    setSyncStatus('synced');
     return data;
-  } catch (err) {
-    setSyncStatus('error');
-    throw err;
-  }
+  });
 }
 
 // =============================================
@@ -321,8 +298,7 @@ export async function upsertProgressLog(input: UpsertProgressLogInput): Promise<
 // =============================================
 
 export async function rolloverTasks(fromDate: string, toDate: string): Promise<number> {
-  setSyncStatus('syncing');
-  try {
+  return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
 
     // Get incomplete tasks for the fromDate
@@ -381,13 +357,9 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
 
     await taskCache.invalidate();
     await calendarCache.invalidate();
-    setSyncStatus('synced');
 
     return idsToUpdate.length;
-  } catch (err) {
-    setSyncStatus('error');
-    throw err;
-  }
+  });
 }
 
 // =============================================
@@ -402,8 +374,7 @@ export async function fetchCalendarData(year: number, month: number): Promise<Ca
     return cached;
   }
 
-  setSyncStatus('syncing');
-  try {
+  return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
     const startDate = `${yearMonth}-01`;
     const endDate = `${yearMonth}-31`;
@@ -478,12 +449,8 @@ export async function fetchCalendarData(year: number, month: number): Promise<Ca
     }
 
     await calendarCache.set(yearMonth, result);
-    setSyncStatus('synced');
     return result;
-  } catch (err) {
-    setSyncStatus('error');
-    throw err;
-  }
+  });
 }
 
 async function revalidateCalendarData(year: number, month: number): Promise<void> {
@@ -504,8 +471,7 @@ export async function fetchAllDataForExport(): Promise<{
   tasks: Task[];
   progressLogs: ProgressLog[];
 }> {
-  setSyncStatus('syncing');
-  try {
+  return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
 
     const [tasksResult, logsResult] = await Promise.all([
@@ -525,13 +491,9 @@ export async function fetchAllDataForExport(): Promise<{
     if (tasksResult.error) throw tasksResult.error;
     if (logsResult.error) throw logsResult.error;
 
-    setSyncStatus('synced');
     return {
       tasks: tasksResult.data || [],
       progressLogs: logsResult.data || [],
     };
-  } catch (err) {
-    setSyncStatus('error');
-    throw err;
-  }
+  });
 }
