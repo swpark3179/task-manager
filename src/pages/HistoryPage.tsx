@@ -1,0 +1,83 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import TaskList from '../components/tasks/TaskList';
+import {
+  fetchTasksByDate, updateTask, deleteTask,
+  completeTask, discardTask, upsertProgressLog, createTask
+} from '../lib/database';
+import { formatDateFull, getNextDay, getPrevDay, getTodayString } from '../utils/dateUtils';
+import type { Task } from '../types';
+import './Pages.css';
+
+export default function HistoryPage() {
+  const { date } = useParams<{ date: string }>();
+  const navigate = useNavigate();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const today = getTodayString();
+  const viewDate = date || today;
+
+  const loadTasks = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchTasksByDate(viewDate);
+      setTasks(data);
+    } catch (err) {
+      console.error('Failed to load tasks:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [viewDate]);
+
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
+  const goToDate = (newDate: string) => {
+    if (newDate === today) {
+      navigate('/');
+    } else {
+      navigate(`/history/${newDate}`);
+    }
+  };
+
+  return (
+    <div className="page history-page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">히스토리</h1>
+          <p className="page-subtitle">{formatDateFull(viewDate)}</p>
+        </div>
+      </div>
+
+      <div className="date-navigator" style={{ marginBottom: 'var(--space-lg)' }}>
+        <button className="date-navigator-btn" onClick={() => goToDate(getPrevDay(viewDate))}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
+        </button>
+        <span className="date-navigator-label">{formatDateFull(viewDate)}</span>
+        <button className="date-navigator-btn" onClick={() => goToDate(getNextDay(viewDate))}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+        </button>
+        {viewDate !== today && (
+          <button className="date-navigator-today" onClick={() => goToDate(today)}>오늘</button>
+        )}
+      </div>
+
+      <div className="page-content">
+        <TaskList
+          tasks={tasks}
+          today={today}
+          loading={loading}
+          onAddTask={async (title) => { await createTask({ title, created_date: viewDate }); await loadTasks(); }}
+          onComplete={async (id) => { await completeTask(id); await loadTasks(); }}
+          onDiscard={async (id) => { await discardTask(id); await loadTasks(); }}
+          onDelete={async (id) => { if (confirm('삭제하시겠습니까?')) { await deleteTask(id); await loadTasks(); } }}
+          onUpdate={async (id, title) => { await updateTask(id, { title }); await loadTasks(); }}
+          onAddChild={async (parentId, title) => { await createTask({ title, parent_id: parentId, created_date: viewDate }); await loadTasks(); }}
+          onSaveProgress={async (taskId, date, content) => { await upsertProgressLog({ task_id: taskId, log_date: date, content }); await loadTasks(); }}
+          onSaveDescription={async (taskId, description) => { await updateTask(taskId, { description }); await loadTasks(); }}
+        />
+      </div>
+    </div>
+  );
+}

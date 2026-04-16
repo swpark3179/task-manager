@@ -1,0 +1,30 @@
+/* =============================================
+   Markdown Component Styles
+   ============================================= */
+
+.markdown-editor-wrapper {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.markdown-viewer {
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.markdown-viewer .wmde-markdown {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-md) 0;
+  overflow-x: auto;
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}

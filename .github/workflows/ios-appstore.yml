@@ -1,0 +1,37 @@
+name: iOS App Store Deploy
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy-appstore:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download IPA from Release
+        run: |
+          mkdir -p artifacts
+          gh release download "${{ github.event.release.tag_name }}" \
+            --pattern '*.ipa' \
+            --dir ./artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify IPA exists
+        run: |
+          if [ ! -f artifacts/*.ipa ]; then
+            echo "No IPA file found in release assets. Skipping deployment."
+            exit 1
+          fi
+          echo "Found IPA:"
+          ls -la artifacts/*.ipa
+
+      - name: Upload to App Store Connect
+        uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: 'artifacts/*.ipa'
+          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
