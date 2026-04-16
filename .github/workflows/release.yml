@@ -103,23 +103,36 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Build Android APK
-        run: npx tauri android build
+        run: npx tauri android build --apk
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Sign APK
-        if: env.ANDROID_KEYSTORE != ''
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > keystore.jks
+          if [ -n "${{ secrets.ANDROID_KEYSTORE }}" ]; then
+            echo "Using provided Android keystore"
+            echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > keystore.jks
+            STOREPASS="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+            KEYPASS="${{ secrets.ANDROID_KEY_PASSWORD }}"
+            ALIAS="${{ secrets.ANDROID_KEY_ALIAS }}"
+          else
+            echo "No Android keystore provided. Generating a temporary dev keystore..."
+            keytool -genkey -v -keystore keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias dev -dname "CN=Dev, OU=Dev, O=Dev, L=Dev, S=Dev, C=US" -storepass "password" -keypass "password"
+            STOREPASS="password"
+            KEYPASS="password"
+            ALIAS="dev"
+          fi
+
           jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
             -keystore keystore.jks \
-            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
-            -keypass "${{ secrets.ANDROID_KEY_PASSWORD }}" \
+            -storepass "$STOREPASS" \
+            -keypass "$KEYPASS" \
             src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk \
-            "${{ secrets.ANDROID_KEY_ALIAS }}"
-        env:
-          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+            "$ALIAS"
+
+          # Rename the signed APK
+          mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
 
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v2
