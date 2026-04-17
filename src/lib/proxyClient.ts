@@ -44,7 +44,7 @@ export function buildSupabaseRestUrl(
 
 // Build headers for Supabase REST API
 export function buildSupabaseHeaders(accessToken?: string): Record<string, string> {
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
   const headers: Record<string, string> = {
     'apikey': anonKey,
     'Content-Type': 'application/json',
