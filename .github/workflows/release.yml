@@ -226,6 +226,7 @@ jobs:
           fi
           mv temp.mobileprovision $UUID.mobileprovision
           echo "Provisioning profile installed: $UUID.mobileprovision"
+          echo "PROVISIONING_PROFILE_SPECIFIER=$UUID" >> $GITHUB_ENV
 
       - name: Install frontend dependencies
         run: npm install
@@ -238,7 +239,7 @@ jobs:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
 
       - name: Build iOS IPA
-        run: npx tauri ios build -- CODE_SIGN_STYLE="Manual"
+        run: npx tauri ios build -- CODE_SIGN_STYLE="Manual" DEVELOPMENT_TEAM="${{ secrets.APPLE_DEVELOPMENT_TEAM }}" PROVISIONING_PROFILE_SPECIFIER="${{ env.PROVISIONING_PROFILE_SPECIFIER }}"
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
