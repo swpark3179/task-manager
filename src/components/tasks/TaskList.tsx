@@ -10,6 +10,7 @@ interface TaskListProps {
   loading: boolean;
   onAddTask: (title: string) => void;
   onComplete: (id: string) => void;
+  onUncomplete?: (id: string) => void;
   onDiscard: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, title: string) => void;
@@ -19,7 +20,7 @@ interface TaskListProps {
 }
 
 export default function TaskList({
-  tasks, today, loading, onAddTask, onComplete, onDiscard,
+  tasks, today, loading, onAddTask, onComplete, onUncomplete, onDiscard,
   onDelete, onUpdate, onAddChild, onSaveProgress, onSaveDescription
 }: TaskListProps) {
   const summary = calculateStatusSummary(tasks);
@@ -93,6 +94,7 @@ export default function TaskList({
           tasks={tasks}
           today={today}
           onComplete={onComplete}
+          onUncomplete={onUncomplete}
           onDiscard={onDiscard}
           onDelete={onDelete}
           onUpdate={onUpdate}

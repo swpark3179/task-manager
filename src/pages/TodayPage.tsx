@@ -4,7 +4,7 @@ import TaskList from '../components/tasks/TaskList';
 
 import {
   fetchTasksByDate, createTask, updateTask, deleteTask,
-  completeTask, discardTask, upsertProgressLog, rolloverTasks
+  completeTask, uncompleteTask, discardTask, upsertProgressLog, rolloverTasks
 } from '../lib/database';
 import { getTodayString, formatDateDisplay } from '../utils/dateUtils';
 import type { Task } from '../types';
@@ -68,6 +68,16 @@ export default function TodayPage() {
       await loadTasks();
     } catch (err) {
       console.error('Failed to complete task:', err);
+    }
+  };
+
+
+  const handleUncomplete = async (id: string) => {
+    try {
+      await uncompleteTask(id);
+      await loadTasks();
+    } catch (err) {
+      console.error('Failed to uncomplete task:', err);
     }
   };
 
@@ -142,6 +152,7 @@ export default function TodayPage() {
           loading={loading}
           onAddTask={handleAddTask}
           onComplete={handleComplete}
+          onUncomplete={handleUncomplete}
           onDiscard={handleDiscard}
           onDelete={handleDelete}
           onUpdate={handleUpdate}

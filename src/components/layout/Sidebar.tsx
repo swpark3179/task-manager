@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import './Layout.css';
@@ -5,6 +6,7 @@ import './Layout.css';
 export default function Sidebar() {
   const { user, signOut } = useAuth();
   const location = useLocation();
+  const [collapsed, setCollapsed] = useState(true);
 
   const navItems = [
     { path: '/', label: '오늘의 할일', icon: 'today' },
@@ -16,9 +18,9 @@ export default function Sidebar() {
   const isHistoryActive = location.pathname.startsWith('/history');
 
   return (
-    <aside className="sidebar desktop-only">
+    <aside className={`sidebar desktop-only ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
-        <div className="sidebar-logo">
+        <div className="sidebar-logo" onClick={() => setCollapsed(!collapsed)} style={{ cursor: 'pointer' }} title={collapsed ? '메뉴 확장' : '메뉴 축소'}>
           <div className="sidebar-logo-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 11l3 3L22 4" />
@@ -62,7 +64,7 @@ export default function Sidebar() {
             <polyline points="16 17 21 12 16 7" />
             <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
-          로그아웃
+          <span>로그아웃</span>
         </button>
       </div>
     </aside>

@@ -8,6 +8,7 @@ interface TaskTreeProps {
   today: string;
   depth?: number;
   onComplete: (id: string) => void;
+  onUncomplete?: (id: string) => void;
   onDiscard: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, title: string) => void;
@@ -19,7 +20,7 @@ interface TaskTreeProps {
 }
 
 export default function TaskTree({
-  tasks, today, depth = 0, onComplete, onDiscard, onDelete,
+  tasks, today, depth = 0, onComplete, onUncomplete, onDiscard, onDelete,
   onUpdate, onAddChild, onSaveProgress, onSaveDescription,
   parentId, showAddInput = true
 }: TaskTreeProps) {
@@ -32,6 +33,7 @@ export default function TaskTree({
           today={today}
           depth={depth}
           onComplete={onComplete}
+          onUncomplete={onUncomplete}
           onDiscard={onDiscard}
           onDelete={onDelete}
           onUpdate={onUpdate}
