@@ -2,23 +2,78 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+          - none
 
 jobs:
+  # =============================================
+  # Prepare release version
+  # =============================================
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+      tag_name: ${{ steps.bump.outputs.tag_name }}
+      commit_sha: ${{ steps.bump.outputs.commit_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bump Version
+        id: bump
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ "${{ inputs.version_bump }}" != "none" ]; then
+            npm version ${{ inputs.version_bump }} --no-git-tag-version
+            NEW_VERSION=$(node -p "require('./package.json').version")
+
+            # Update tauri.conf.json version
+            sed -i 's/"version": "[^"]*"/"version": "'$NEW_VERSION'"/' src-tauri/tauri.conf.json
+
+            git add package.json package-lock.json src-tauri/tauri.conf.json
+            git commit -m "chore: bump version to v$NEW_VERSION"
+            git push
+
+            echo "commit_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          else
+            NEW_VERSION=$(node -p "require('./package.json').version")
+            echo "commit_sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag_name=v$NEW_VERSION" >> $GITHUB_OUTPUT
+
   # =============================================
   # Desktop builds (Windows)
   # =============================================
   build-desktop:
+    needs: prepare
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: windows-latest
-            args: ''
-    runs-on: ${{ matrix.platform }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit_sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -31,29 +86,33 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      - name: Build and Release
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Desktop App
+        run: npx tauri build
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Upload Desktop Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tagName: v__VERSION__
-          releaseName: 'Task Manager v__VERSION__'
-          releaseBody: 'See the assets to download and install this version.'
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+          name: desktop-artifacts
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: ignore
 
   # =============================================
   # Android APK build
   # =============================================
   build-android:
+    needs: prepare
     permissions:
       contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit_sha }}
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -121,24 +180,25 @@ jobs:
           # Rename the signed APK
           mv src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
 
-      - name: Upload APK to Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          draft: true
-          files: |
-            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: android-artifacts
+          path: src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+          if-no-files-found: ignore
 
   # =============================================
   # iOS IPA build
   # =============================================
   build-ios:
+    needs: prepare
     permissions:
       contents: write
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit_sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -177,11 +237,46 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
 
-      - name: Upload IPA to Release
+      - name: Upload iOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-artifacts
+          path: src-tauri/gen/apple/build/**/*.ipa
+          if-no-files-found: ignore
+
+  # =============================================
+  # Create Release Page
+  # =============================================
+  create-release:
+    needs: [prepare, build-desktop, build-android, build-ios]
+    if: |
+      always() &&
+      needs.prepare.result == 'success' &&
+      (needs.build-desktop.result == 'success' || needs.build-android.result == 'success' || needs.build-ios.result == 'success')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
+          name: "Task Manager ${{ needs.prepare.outputs.tag_name }}"
+          body: |
+            Task Manager 최신 릴리스입니다.
+
+            다운로드 파일 안내:
+            - **Windows**: `.exe` 또는 `.msi` 파일을 다운로드하여 설치하세요.
+            - **Android**: `.apk` 파일을 다운로드하여 설치하세요.
+            - **iOS**: `.ipa` 파일은 개발용 프로비저닝으로 빌드되었습니다.
           draft: true
-          files: |
-            src-tauri/gen/apple/build/**/*.ipa
+          prerelease: false
+          files: artifacts/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
