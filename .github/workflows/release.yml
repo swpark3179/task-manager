@@ -208,135 +208,28 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
-      - name: Import Apple Certificate
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-
-      - name: Install Apple Provisioning Profile
-        run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          PROFILE_PATH=~/Library/MobileDevice/Provisioning\ Profiles/temp.mobileprovision
-          echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 -d > "$PROFILE_PATH"
-
-          # PlistBuddy로 바이너리 plist에서 UUID를 정확하게 추출
-          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
-          if [ -z "$UUID" ]; then
-            echo "Failed to extract UUID from provisioning profile"
-            exit 1
-          fi
-
-          mv "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
-          echo "Provisioning profile installed: $UUID.mobileprovision"
-
-          # Profile Name도 추출하여 로그 출력
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /dev/stdin <<< $(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision))
-          echo "Profile Name: $PROFILE_NAME"
-          echo "Profile UUID: $UUID"
-
-          echo "PROVISIONING_PROFILE_UUID=$UUID" >> $GITHUB_ENV
-          echo "PROVISIONING_PROFILE_SPECIFIER=$UUID" >> $GITHUB_ENV
-
       - name: Install frontend dependencies
         run: npm install
 
       - name: Initialize iOS target
         run: npx tauri ios init
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
-
-      - name: Patch Xcode project for Manual Signing
-        # tauri ios build -- 로 전달되는 인수는 xcodebuild가 아닌 cargo로 전달됨
-        # 따라서 tauri ios init 이 생성한 .pbxproj를 직접 수정해야 함
-        run: |
-          PBXPROJ="src-tauri/gen/apple/task-manager.xcodeproj/project.pbxproj"
-          TEAM_ID="${{ secrets.APPLE_DEVELOPMENT_TEAM }}"
-          UUID="${{ env.PROVISIONING_PROFILE_UUID }}"
-
-          echo "Patching: $PBXPROJ"
-          echo "Team ID : $TEAM_ID"
-          echo "Profile UUID: $UUID"
-
-          # Automatic → Manual 서명 방식 변경
-          # macOS BSD sed는 -i 뒤에 빈 문자열 '' 필수 (GNU sed와 다름)
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ"
-
-          # python3으로 PROVISIONING_PROFILE_SPECIFIER 주입 (sed보다 안정적)
-          python3 - <<'PYEOF'
-          import os, re
-
-          pbxproj_path = "src-tauri/gen/apple/task-manager.xcodeproj/project.pbxproj"
-          team_id = os.environ["APPLE_DEVELOPMENT_TEAM"]
-          uuid = os.environ["PROVISIONING_PROFILE_UUID"]
-
-          with open(pbxproj_path, "r") as f:
-              content = f.read()
-
-          # CODE_SIGN_STYLE = Manual; 줄 다음에 PROVISIONING_PROFILE_SPECIFIER 삽입
-          # (이미 값이 있으면 교체, 없으면 CODE_SIGN_STYLE 줄 뒤에 추가)
-          if "PROVISIONING_PROFILE_SPECIFIER" in content:
-              content = re.sub(
-                  r'PROVISIONING_PROFILE_SPECIFIER = [^;]*;',
-                  f'PROVISIONING_PROFILE_SPECIFIER = "{uuid}";',
-                  content
-              )
-          else:
-              content = content.replace(
-                  "CODE_SIGN_STYLE = Manual;",
-                  f'CODE_SIGN_STYLE = Manual;\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = "{uuid}";'
-              )
-
-          # DEVELOPMENT_TEAM이 비어 있으면 채워 넣음
-          content = re.sub(
-              r'DEVELOPMENT_TEAM = "";',
-              f'DEVELOPMENT_TEAM = {team_id};',
-              content
-          )
-
-          with open(pbxproj_path, "w") as f:
-              f.write(content)
-
-          print("pbxproj patched successfully")
-          PYEOF
-        env:
-          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
-          PROVISIONING_PROFILE_UUID: ${{ env.PROVISIONING_PROFILE_UUID }}
-
-      - name: Create ExportOptions.plist
-        run: |
-          cat > /tmp/ExportOptions.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>development</string>
-            <key>teamID</key>
-            <string>${{ secrets.APPLE_DEVELOPMENT_TEAM }}</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>com.swpark3179.task-manager</key>
-              <string>${{ env.PROVISIONING_PROFILE_UUID }}</string>
-            </dict>
-          </dict>
-          </plist>
-          EOF
-          echo "ExportOptions.plist created:"
-          cat /tmp/ExportOptions.plist
 
       - name: Build iOS IPA
-        # tauri ios build 는 내부적으로 xcodebuild를 호출함
-        # .pbxproj를 패치했으므로 추가 플래그 없이 빌드 가능
+        # Tauri 공식 Manual Signing 방식:
+        # IOS_CERTIFICATE, IOS_CERTIFICATE_PASSWORD, IOS_MOBILE_PROVISION 환경변수를
+        # 설정하면 Tauri CLI가 자동으로 Manual 서명을 처리함
+        # (수동 pbxproj 패치, 프로비저닝 프로파일 설치 불필요)
+        # 참고: https://tauri.app/distribute/sign/ios/#manual-signing
         run: npx tauri ios build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          IOS_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
 
       - name: Upload iOS Artifacts
         uses: actions/upload-artifact@v4
