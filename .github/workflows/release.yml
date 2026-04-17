@@ -261,7 +261,8 @@ jobs:
           echo "Profile UUID: $UUID"
 
           # Automatic → Manual 서명 방식 변경
-          sed -i 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ"
+          # macOS BSD sed는 -i 뒤에 빈 문자열 '' 필수 (GNU sed와 다름)
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ"
 
           # python3으로 PROVISIONING_PROFILE_SPECIFIER 주입 (sed보다 안정적)
           python3 - <<'PYEOF'
