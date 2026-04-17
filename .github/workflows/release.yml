@@ -87,7 +87,7 @@ jobs:
         run: npm install
 
       - name: Build Desktop App
-        run: npx tauri build
+        run: npx tauri build --no-bundle
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -97,8 +97,7 @@ jobs:
         with:
           name: desktop-artifacts
           path: |
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/*.exe
           if-no-files-found: ignore
 
   # =============================================
@@ -272,7 +271,7 @@ jobs:
             Task Manager 최신 릴리스입니다.
 
             다운로드 파일 안내:
-            - **Windows**: `.exe` 또는 `.msi` 파일을 다운로드하여 설치하세요.
+            - **Windows**: `.exe` 파일을 다운로드하여 설치 없이 바로 실행하세요.
             - **Android**: `.apk` 파일을 다운로드하여 설치하세요.
             - **iOS**: `.ipa` 파일은 개발용 프로비저닝으로 빌드되었습니다.
           draft: true
