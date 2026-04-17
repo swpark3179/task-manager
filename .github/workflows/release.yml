@@ -217,15 +217,25 @@ jobs:
       - name: Install Apple Provisioning Profile
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/temp.mobileprovision
-          cd ~/Library/MobileDevice/Provisioning\ Profiles
-          UUID=$(grep -aA1 UUID temp.mobileprovision | grep -E -o "[-A-Fa-f0-9]{36}")
+          PROFILE_PATH=~/Library/MobileDevice/Provisioning\ Profiles/temp.mobileprovision
+          echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 -d > "$PROFILE_PATH"
+
+          # PlistBuddy로 바이너리 plist에서 UUID를 정확하게 추출
+          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
           if [ -z "$UUID" ]; then
             echo "Failed to extract UUID from provisioning profile"
             exit 1
           fi
-          mv temp.mobileprovision $UUID.mobileprovision
+
+          mv "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
           echo "Provisioning profile installed: $UUID.mobileprovision"
+
+          # Profile Name도 추출하여 로그 출력
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /dev/stdin <<< $(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision))
+          echo "Profile Name: $PROFILE_NAME"
+          echo "Profile UUID: $UUID"
+
+          echo "PROVISIONING_PROFILE_UUID=$UUID" >> $GITHUB_ENV
           echo "PROVISIONING_PROFILE_SPECIFIER=$UUID" >> $GITHUB_ENV
 
       - name: Install frontend dependencies
@@ -238,8 +248,38 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
 
+      - name: Create ExportOptions.plist
+        run: |
+          cat > /tmp/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>teamID</key>
+            <string>${{ secrets.APPLE_DEVELOPMENT_TEAM }}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.swpark3179.task-manager</key>
+              <string>${{ env.PROVISIONING_PROFILE_UUID }}</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+          echo "ExportOptions.plist created:"
+          cat /tmp/ExportOptions.plist
+
       - name: Build iOS IPA
-        run: npx tauri ios build -- CODE_SIGN_STYLE="Manual" DEVELOPMENT_TEAM="${{ secrets.APPLE_DEVELOPMENT_TEAM }}" PROVISIONING_PROFILE_SPECIFIER="${{ env.PROVISIONING_PROFILE_SPECIFIER }}"
+        run: |
+          npx tauri ios build \
+            -- \
+            CODE_SIGN_STYLE="Manual" \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_DEVELOPMENT_TEAM }}" \
+            PROVISIONING_PROFILE="${{ env.PROVISIONING_PROFILE_UUID }}" \
+            PROVISIONING_PROFILE_SPECIFIER="${{ env.PROVISIONING_PROFILE_UUID }}"
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
