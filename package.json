@@ -16,6 +16,7 @@
     "@tauri-apps/plugin-fs": "^2.5.0",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-store": "^2.4.2",
+    "@types/uuid": "^10.0.0",
     "@uiw/react-md-editor": "^4.1.0",
     "date-fns": "^4.1.0",
     "idb": "^8.0.3",
@@ -25,7 +26,8 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.14.1",
     "rehype-highlight": "^7.0.2",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

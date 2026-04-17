@@ -68,6 +68,7 @@ export interface CalendarCellData {
 
 // Database operation types
 export interface CreateTaskInput {
+  id?: string;
   title: string;
   parent_id?: string | null;
   description?: string | null;

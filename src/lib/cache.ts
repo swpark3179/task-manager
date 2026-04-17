@@ -101,12 +101,185 @@ async function invalidateCache(storeName: string, key?: string): Promise<void> {
 
 // =============================================
 // Domain-Specific Cache Functions
+
+export async function updateTaskInAllCaches(taskId: string, updates: Partial<Task>): Promise<void> {
+  try {
+    const db = await getDB();
+    const tx = db.transaction('tasks', 'readwrite');
+    let cursor = await tx.store.openCursor();
+
+    while (cursor) {
+      const entry = cursor.value;
+      let modified = false;
+
+      const newTasks = entry.data.map((t: Task) => {
+        if (t.id === taskId) {
+          modified = true;
+          return { ...t, ...updates };
+        }
+        return t;
+      });
+
+      if (modified) {
+        entry.data = newTasks;
+        await cursor.update(entry);
+      }
+
+      cursor = await cursor.continue();
+    }
+    await tx.done;
+  } catch (err) {
+    console.error('Failed to update cache:', err);
+  }
+}
+
+export async function removeTaskFromAllCaches(taskId: string): Promise<void> {
+  try {
+    const db = await getDB();
+    const tx = db.transaction('tasks', 'readwrite');
+    let cursor = await tx.store.openCursor();
+
+    while (cursor) {
+      const entry = cursor.value;
+      const initialLength = entry.data.length;
+
+      entry.data = entry.data.filter((t: Task) => t.id !== taskId && t.parent_id !== taskId);
+
+      if (entry.data.length !== initialLength) {
+        await cursor.update(entry);
+      }
+
+      cursor = await cursor.continue();
+    }
+    await tx.done;
+  } catch (err) {
+    console.error('Failed to remove from cache:', err);
+  }
+}
+
+export async function getTaskFromAllCaches(taskId: string): Promise<Task | null> {
+  try {
+    const db = await getDB();
+    const tx = db.transaction('tasks', 'readonly');
+    let cursor = await tx.store.openCursor();
+
+    while (cursor) {
+      const entry = cursor.value;
+      const task = entry.data.find((t: Task) => t.id === taskId);
+      if (task) return task;
+      cursor = await cursor.continue();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+
+export async function updateTaskInCache(taskId: string, updates: Partial<Task>): Promise<Task | null> {
+  try {
+    const db = await getDB();
+    const tx = db.transaction('tasks', 'readwrite');
+    let cursor = await tx.store.openCursor();
+    let updatedTask: Task | null = null;
+
+    while (cursor) {
+      const entry = cursor.value;
+      let modified = false;
+
+      const newTasks = entry.data.map((t: Task) => {
+        if (t.id === taskId) {
+          modified = true;
+          updatedTask = { ...t, ...updates };
+          return updatedTask;
+        }
+        return t;
+      });
+
+      if (modified) {
+        entry.data = newTasks;
+        await cursor.update(entry);
+        break;
+      }
+
+      cursor = await cursor.continue();
+    }
+    await tx.done;
+    return updatedTask;
+  } catch {
+    return null;
+  }
+}
+
+export async function removeTaskFromCache(taskId: string): Promise<void> {
+  try {
+    const db = await getDB();
+    const tx = db.transaction('tasks', 'readwrite');
+    let cursor = await tx.store.openCursor();
+
+    while (cursor) {
+      const entry = cursor.value;
+      const initialLength = entry.data.length;
+
+      entry.data = entry.data.filter((t: Task) => t.id !== taskId && t.parent_id !== taskId);
+
+      if (entry.data.length !== initialLength) {
+        await cursor.update(entry);
+      }
+
+      cursor = await cursor.continue();
+    }
+    await tx.done;
+  } catch { }
+}
+
+export async function getTaskFromCache(taskId: string): Promise<Task | null> {
+  try {
+    const db = await getDB();
+    const tx = db.transaction('tasks', 'readonly');
+    let cursor = await tx.store.openCursor();
+
+    while (cursor) {
+      const entry = cursor.value;
+      const task = entry.data.find((t: Task) => t.id === taskId);
+      if (task) return task;
+      cursor = await cursor.continue();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // =============================================
+
 
 export const taskCache = {
   get: (date: string) => getCached<Task[]>('tasks', date, CACHE_TTL.tasks),
   set: (date: string, tasks: Task[]) => setCache('tasks', date, tasks),
   invalidate: (date?: string) => invalidateCache('tasks', date),
+  updateTask: async (date: string, taskId: string, updates: Partial<Task>) => {
+    const tasks = await getCached<Task[]>('tasks', date, 0);
+    if (tasks) {
+      const newTasks = tasks.map(t => t.id === taskId ? { ...t, ...updates } : t);
+      await setCache('tasks', date, newTasks);
+    }
+  },
+  addTask: async (date: string, task: Task) => {
+    const tasks = await getCached<Task[]>('tasks', date, 0);
+    if (tasks) {
+      await setCache('tasks', date, [...tasks, task]);
+    } else {
+      await setCache('tasks', date, [task]);
+    }
+  },
+  removeTask: async (date: string, taskId: string) => {
+    const tasks = await getCached<Task[]>('tasks', date, 0);
+    if (tasks) {
+      const newTasks = tasks.filter(t => t.id !== taskId && t.parent_id !== taskId);
+      await setCache('tasks', date, newTasks);
+    }
+  }
 };
 
 export const progressLogCache = {
