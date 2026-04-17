@@ -82,14 +82,28 @@ export default function TaskDetail({
             ) : (
               <div
                 className="task-detail-description"
-                onClick={() => !isFinished && setEditingDescription(true)}
               >
                 {task.description ? (
-                  <MarkdownViewer content={task.description} />
+                  <div className="task-detail-description-content">
+                    <MarkdownViewer content={task.description} />
+                  </div>
                 ) : (
                   <p className="task-detail-placeholder">
-                    {isFinished ? '세부 내용 없음' : '클릭하여 세부 내용을 작성하세요...'}
+                    {isFinished ? '세부 내용 없음' : '세부 내용이 없습니다.'}
                   </p>
+                )}
+                {!isFinished && (
+                  <button
+                    className="btn btn-ghost btn-sm task-detail-edit-btn"
+                    onClick={() => setEditingDescription(true)}
+                    style={{ marginTop: 'var(--space-sm)' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    Edit
+                  </button>
                 )}
               </div>
             )}

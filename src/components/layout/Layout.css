@@ -59,6 +59,7 @@
 .sidebar {
   width: var(--sidebar-width);
   height: 100vh;
+  transition: width var(--transition-fast) ease-in-out;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-light);
   display: flex;
@@ -242,4 +243,44 @@
   .main-header {
     padding: var(--space-sm) var(--space-md);
   }
+}
+
+/* Collapsed Sidebar Styles */
+.sidebar.collapsed {
+  width: 68px; /* Width for just icons */
+}
+
+.sidebar.collapsed .sidebar-logo-text,
+.sidebar.collapsed .sidebar-nav-label,
+.sidebar.collapsed .sidebar-user-info,
+.sidebar.collapsed .sidebar-logout span {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-header {
+  padding: var(--space-lg) auto;
+  display: flex;
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-logo {
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-nav-item {
+  justify-content: center;
+  padding: 10px;
+}
+
+.sidebar.collapsed .sidebar-nav-icon {
+  margin: 0;
+}
+
+.sidebar.collapsed .sidebar-user {
+  justify-content: center;
+  padding: var(--space-xs) 0;
+}
+
+.sidebar.collapsed .sidebar-logout {
+  justify-content: center;
 }

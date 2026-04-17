@@ -11,6 +11,7 @@ interface TaskItemProps {
   today: string;
   depth?: number;
   onComplete: (id: string) => void;
+  onUncomplete?: (id: string) => void;
   onDiscard: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, title: string) => void;
@@ -20,7 +21,7 @@ interface TaskItemProps {
 }
 
 export default function TaskItem({
-  task, today, depth = 0, onComplete, onDiscard, onDelete,
+  task, today, depth = 0, onComplete, onUncomplete, onDiscard, onDelete,
   onUpdate, onAddChild, onSaveProgress, onSaveDescription
 }: TaskItemProps) {
   const [expanded, setExpanded] = useState(false);
@@ -54,6 +55,7 @@ export default function TaskItem({
           status={task.status}
           disabled={isParent}
           onComplete={() => onComplete(task.id)}
+          onUncomplete={onUncomplete ? () => onUncomplete(task.id) : undefined}
           onDiscard={() => onDiscard(task.id)}
         />
 
@@ -152,6 +154,7 @@ export default function TaskItem({
               today={today}
               depth={depth + 1}
               onComplete={onComplete}
+              onUncomplete={onUncomplete}
               onDiscard={onDiscard}
               onDelete={onDelete}
               onUpdate={onUpdate}

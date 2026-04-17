@@ -162,6 +162,26 @@ export async function deleteTask(id: string): Promise<void> {
   });
 }
 
+
+export async function uncompleteTask(id: string): Promise<void> {
+  return withSyncStatus(async () => {
+    // Update task
+    const updates: UpdateTaskInput = {
+      status: 'pending',
+      completed_at: null,
+    };
+
+    const { error } = await supabase
+      .from('tasks')
+      .update(updates)
+      .eq('id', id);
+
+    if (error) throw error;
+
+    await taskCache.invalidate();
+  });
+}
+
 export async function completeTask(id: string): Promise<void> {
   return withSyncStatus(async () => {
     // Fetch all progress logs for this task

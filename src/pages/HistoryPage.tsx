@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import TaskList from '../components/tasks/TaskList';
 import {
   fetchTasksByDate, updateTask, deleteTask,
-  completeTask, discardTask, upsertProgressLog, createTask
+  completeTask, uncompleteTask, discardTask, upsertProgressLog, createTask
 } from '../lib/database';
 import { formatDateFull, getNextDay, getPrevDay, getTodayString } from '../utils/dateUtils';
 import type { Task } from '../types';
@@ -70,6 +70,7 @@ export default function HistoryPage() {
           loading={loading}
           onAddTask={async (title) => { await createTask({ title, created_date: viewDate }); await loadTasks(); }}
           onComplete={async (id) => { await completeTask(id); await loadTasks(); }}
+          onUncomplete={async (id) => { await uncompleteTask(id); await loadTasks(); }}
           onDiscard={async (id) => { await discardTask(id); await loadTasks(); }}
           onDelete={async (id) => { if (confirm('삭제하시겠습니까?')) { await deleteTask(id); await loadTasks(); } }}
           onUpdate={async (id, title) => { await updateTask(id, { title }); await loadTasks(); }}

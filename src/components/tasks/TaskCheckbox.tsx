@@ -7,14 +7,19 @@ interface TaskCheckboxProps {
   disabled?: boolean;
   onComplete: () => void;
   onDiscard: () => void;
+  onUncomplete?: () => void;
 }
 
-export default function TaskCheckbox({ status, disabled, onComplete, onDiscard }: TaskCheckboxProps) {
+export default function TaskCheckbox({ status, disabled, onComplete, onDiscard, onUncomplete }: TaskCheckboxProps) {
   const [longPressTimer, setLongPressTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const handleClick = (e: MouseEvent) => {
     e.stopPropagation();
-    if (disabled || status === 'completed' || status === 'discarded') return;
+    if (disabled || status === 'discarded') return;
+    if (status === 'completed') {
+      if (onUncomplete) onUncomplete();
+      return;
+    }
     onComplete();
   };
 
