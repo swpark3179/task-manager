@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이메일 인증</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #eceff4; /* Nord6 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #2e3440; /* Nord0 */
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+        .header {
+            background-color: #5e81ac; /* Nord10 */
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 40px 30px;
+            text-align: center;
+        }
+        .content p {
+            margin-bottom: 24px;
+            font-size: 16px;
+            color: #4c566a; /* Nord3 */
+        }
+        .button {
+            display: inline-block;
+            background-color: #81a1c1; /* Nord9 */
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: background-color 0.2s;
+            margin: 10px 0 30px;
+        }
+        .button:hover {
+            background-color: #5e81ac; /* Nord10 */
+        }
+        .footer {
+            background-color: #f8f9fb;
+            padding: 20px;
+            text-align: center;
+            font-size: 13px;
+            color: #d8dee9; /* Nord4 */
+            border-top: 1px solid #e5e9f0; /* Nord5 */
+        }
+        .footer p {
+            color: #a3be8c;
+            margin: 0;
+            color: #88c0d0;
+            color: #4c566a;
+        }
+        .divider {
+            height: 1px;
+            background-color: #e5e9f0; /* Nord5 */
+            margin: 30px 0;
+        }
+        .help-text {
+            font-size: 14px;
+            color: #4c566a;
+            text-align: left;
+            background-color: #f4f7fa;
+            padding: 15px;
+            border-radius: 6px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>업무관리</h1>
+        </div>
+        <div class="content">
+            <h2 style="color: #3b4252; margin-top: 0;">가입을 환영합니다!</h2>
+            <p>업무관리 서비스에 가입해 주셔서 감사합니다.<br>아래 버튼을 클릭하여 이메일 주소를 인증해 주세요.</p>
+
+            <a href="{{ .ConfirmationURL }}" class="button">이메일 주소 인증하기</a>
+
+            <div class="divider"></div>
+
+            <div class="help-text">
+                버튼이 작동하지 않는 경우, 아래 링크를 복사하여 브라우저의 주소창에 붙여넣기 해주세요.<br><br>
+                <a href="{{ .ConfirmationURL }}" style="color: #5e81ac; text-decoration: none;">{{ .ConfirmationURL }}</a>
+            </div>
+        </div>
+        <div class="footer">
+            <p>본 메일은 발신 전용이며, 회신되지 않습니다.</p>
+            <p style="margin-top: 8px;">&copy; 업무관리 App. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
