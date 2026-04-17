@@ -145,7 +145,6 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
 
       - name: Build Android APK
         run: npx tauri android build --apk
@@ -220,7 +219,7 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/temp.mobileprovision
           cd ~/Library/MobileDevice/Provisioning\ Profiles
-          UUID=$(grep -aA1 UUID temp.mobileprovision | grep -o "[-A-Fa-f0-9]\{36\}")
+          UUID=$(grep -aA1 UUID temp.mobileprovision | grep -E -o "[-A-Fa-f0-9]{36}")
           if [ -z "$UUID" ]; then
             echo "Failed to extract UUID from provisioning profile"
             exit 1
@@ -236,6 +235,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
 
       - name: Build iOS IPA
         run: npx tauri ios build -- CODE_SIGN_STYLE="Manual"
