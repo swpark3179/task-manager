@@ -1,10 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { AppSettings } from '../types';
 
-// =============================================
 // Proxy Client - Routes Supabase requests through
 // Tauri Rust backend when proxy mode is enabled
-// =============================================
 
 type ProxyRequestParams = Record<string, unknown>;
 
