@@ -218,7 +218,15 @@ jobs:
       - name: Install Apple Provisioning Profile
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+          echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/temp.mobileprovision
+          cd ~/Library/MobileDevice/Provisioning\ Profiles
+          UUID=$(grep -aA1 UUID temp.mobileprovision | grep -o "[-A-F0-9]\{36\}")
+          if [ -z "$UUID" ]; then
+            echo "Failed to extract UUID from provisioning profile"
+            exit 1
+          fi
+          mv temp.mobileprovision $UUID.mobileprovision
+          echo "Provisioning profile installed: $UUID.mobileprovision"
 
       - name: Install frontend dependencies
         run: npm install
