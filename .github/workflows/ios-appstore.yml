@@ -2,11 +2,6 @@ name: iOS App Store Deploy
 
 on:
   workflow_dispatch:
-    inputs:
-      tag_name:
-        description: 'Release tag to deploy'
-        required: true
-        type: string
 
 jobs:
   deploy-appstore:
@@ -14,10 +9,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download IPA from Release
+      - name: Download IPA from Latest Release
         run: |
           mkdir -p artifacts
-          gh release download "${{ inputs.tag_name }}" \
+          # tag를 지정하지 않으면 자동으로 최신 릴리스에서 다운로드합니다.
+          gh release download \
             --pattern '*.ipa' \
             --dir ./artifacts
         env:
