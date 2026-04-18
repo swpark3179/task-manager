@@ -260,58 +260,47 @@ jobs:
           echo "Provisioning Profile UUID: $UUID"
           echo "PROVISIONING_PROFILE_UUID=$UUID" >> $GITHUB_ENV
 
-      - name: Initialize iOS target
-        run: npx tauri ios init
-        env:
-          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
 
       - name: Patch Xcode project for Manual Signing
         run: |
           PBXPROJ="src-tauri/gen/apple/task-manager.xcodeproj/project.pbxproj"
-          TEAM_ID="${{ secrets.APPLE_DEVELOPMENT_TEAM }}"
-          PP_UUID="${{ env.PROVISIONING_PROFILE_UUID }}"
 
           echo "Patching pbxproj for Manual Signing..."
 
-          python3 << 'PYEOF'
-import os, re
+          # Python 스크립트를 파일로 저장 후 실행 (heredoc은 YAML과 충돌)
+          cat > /tmp/patch_pbxproj.py << 'PYEOF'
+          import os, re, sys
+          pbxproj = sys.argv[1]
+          team = sys.argv[2]
+          uuid = sys.argv[3]
+          with open(pbxproj) as f:
+              content = f.read()
+          def patch(match):
+              b = match.group(0)
+              pairs = {
+                  "CODE_SIGN_STYLE": "Manual",
+                  "CODE_SIGN_IDENTITY": '"iPhone Developer"',
+                  "PROVISIONING_PROFILE_SPECIFIER": f'"{uuid}"',
+              }
+              b = re.sub(r'DEVELOPMENT_TEAM = [^;]*;', f'DEVELOPMENT_TEAM = {team};', b)
+              for k, v in pairs.items():
+                  p = rf'{k} = [^;]*;'
+                  if re.search(p, b):
+                      b = re.sub(p, f'{k} = {v};', b)
+                  else:
+                      b = b.replace('buildSettings = {', f'buildSettings = {{\n\t\t\t\t{k} = {v};', 1)
+              return b
+          content = re.sub(r'buildSettings = \{[^}]+\}', patch, content, flags=re.DOTALL)
+          with open(pbxproj, "w") as f:
+              f.write(content)
+          print("pbxproj patched successfully")
+          PYEOF
 
-pbxproj = "src-tauri/gen/apple/task-manager.xcodeproj/project.pbxproj"
-team = os.environ["TEAM_ID"]
-uuid = os.environ["PP_UUID"]
-
-with open(pbxproj) as f:
-    content = f.read()
-
-def patch(match):
-    b = match.group(0)
-    pairs = {
-        "CODE_SIGN_STYLE": "Manual",
-        "CODE_SIGN_IDENTITY": '"iPhone Developer"',
-        "PROVISIONING_PROFILE_SPECIFIER": f'"{uuid}"',
-    }
-    b = re.sub(r'DEVELOPMENT_TEAM = [^;]*;', f'DEVELOPMENT_TEAM = {team};', b)
-    for k, v in pairs.items():
-        p = rf'{k} = [^;]*;'
-        if re.search(p, b):
-            b = re.sub(p, f'{k} = {v};', b)
-        else:
-            b = b.replace('buildSettings = {', f'buildSettings = {{\n\t\t\t\t{k} = {v};', 1)
-    return b
-
-content = re.sub(r'buildSettings = \{[^}]+\}', patch, content, flags=re.DOTALL)
-
-with open(pbxproj, "w") as f:
-    f.write(content)
-print("pbxproj patched successfully")
-PYEOF
+          python3 /tmp/patch_pbxproj.py "$PBXPROJ" "${{ secrets.APPLE_DEVELOPMENT_TEAM }}" "${{ env.PROVISIONING_PROFILE_UUID }}"
 
           # 패치 결과 확인
           echo "=== Verification ==="
           grep -n "CODE_SIGN_STYLE\|PROVISIONING_PROFILE_SPECIFIER\|DEVELOPMENT_TEAM" "$PBXPROJ" | head -20
-        env:
-          TEAM_ID: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
-          PP_UUID: ${{ env.PROVISIONING_PROFILE_UUID }}
 
       - name: Build iOS IPA
         # IOS_CERTIFICATE를 설정하지 않아 Tauri의 내부 키체인 관리를 건너뜀
