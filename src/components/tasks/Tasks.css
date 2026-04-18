@@ -317,6 +317,7 @@
 }
 
 .task-detail-description {
+  position: relative;
   cursor: pointer;
   padding: var(--space-sm);
   border-radius: var(--radius-sm);
@@ -434,4 +435,17 @@
   display: flex;
   gap: var(--space-sm);
   justify-content: flex-end;
+}
+
+.task-detail-edit-btn.absolute-top-right {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  margin-top: 0 !important;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.task-detail-description:hover .task-detail-edit-btn.absolute-top-right {
+  opacity: 1;
 }
