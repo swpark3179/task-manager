@@ -216,6 +216,44 @@ jobs:
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
 
+      - name: Debug Certificate
+        run: |
+          echo "=== .p12 내용 확인 ==="
+          echo "$IOS_CERTIFICATE" | base64 -d > /tmp/cert.p12
+
+          # 임시 키체인 생성 및 인증서 import
+          security create-keychain -p "debug" /tmp/debug.keychain-db
+          security set-keychain-settings -lut 21600 /tmp/debug.keychain-db
+          security unlock-keychain -p "debug" /tmp/debug.keychain-db
+          security import /tmp/cert.p12 -k /tmp/debug.keychain-db -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S "apple-tool:,apple:" -s -k "debug" /tmp/debug.keychain-db
+
+          # 현재 키체인 검색 목록에 추가
+          security list-keychains -d user -s /tmp/debug.keychain-db $(security list-keychains -d user | tr -d '"')
+
+          echo ""
+          echo "=== 코드서명 가능한 Identity ==="
+          security find-identity -v -p codesigning /tmp/debug.keychain-db || echo "❌ codesigning identity 없음"
+
+          echo ""
+          echo "=== 모든 Identity ==="
+          security find-identity -v /tmp/debug.keychain-db || echo "❌ identity 없음"
+
+          echo ""
+          echo "=== 인증서 상세 (Subject / Issuer) ==="
+          security find-certificate -a -p /tmp/debug.keychain-db | openssl x509 -subject -issuer -dates -noout 2>/dev/null || echo "인증서 파싱 실패"
+
+          echo ""
+          echo "=== 인증서 Key Usage ==="
+          security find-certificate -a -p /tmp/debug.keychain-db | openssl x509 -text -noout 2>/dev/null | grep -A2 "Key Usage" || echo "Key Usage 없음"
+
+          # 정리
+          security delete-keychain /tmp/debug.keychain-db
+          rm -f /tmp/cert.p12
+        env:
+          IOS_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
       - name: Build iOS IPA
         # Tauri 공식 Manual Signing 방식:
         # IOS_CERTIFICATE, IOS_CERTIFICATE_PASSWORD, IOS_MOBILE_PROVISION 환경변수를
