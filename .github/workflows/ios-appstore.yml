@@ -23,19 +23,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify IPA exists
+      - name: Validate App Store Connect secrets
         run: |
-          if [ ! -f artifacts/*.ipa ]; then
-            echo "No IPA file found in release assets. Skipping deployment."
+          missing=()
+          [ -z "${{ secrets.APPSTORE_ISSUER_ID }}" ] && missing+=("APPSTORE_ISSUER_ID")
+          [ -z "${{ secrets.APPSTORE_API_KEY_ID }}" ] && missing+=("APPSTORE_API_KEY_ID")
+          [ -z "${{ secrets.APPSTORE_API_PRIVATE_KEY }}" ] && missing+=("APPSTORE_API_PRIVATE_KEY")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo "Please add them in GitHub → Settings → Secrets and variables → Actions"
             exit 1
           fi
-          echo "Found IPA:"
-          ls -la artifacts/*.ipa
+          echo "All App Store Connect secrets are configured."
+
+      - name: Resolve IPA path
+        id: ipa
+        run: |
+          IPA_FILE=$(ls artifacts/*.ipa 2>/dev/null | head -n 1)
+          if [ -z "$IPA_FILE" ]; then
+            echo "::error::No IPA file found in artifacts/"
+            exit 1
+          fi
+          echo "Found IPA: $IPA_FILE"
+          echo "path=$IPA_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Upload to App Store Connect
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: 'artifacts/*.ipa'
+          app-path: ${{ steps.ipa.outputs.path }}
           issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
           api-key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
           api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
