@@ -305,7 +305,7 @@ jobs:
       - name: Build iOS IPA
         # IOS_CERTIFICATE 미설정 → Tauri의 키체인 관리 건너뜀 (수동 키체인 사용)
         # IOS_MOBILE_PROVISION 설정 → Tauri가 export 시 프로비저닝 프로파일 사용
-        run: npx tauri ios build --export-method app-store
+        run: npx tauri ios build --export-method app-store-connect
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
