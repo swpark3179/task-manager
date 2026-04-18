@@ -216,58 +216,115 @@ jobs:
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
 
-      - name: Debug Certificate
+      - name: Setup Code Signing
         run: |
-          echo "=== .p12 내용 확인 ==="
+          # 1. 키체인 생성 및 설정
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # 2. 인증서 import
           echo "$IOS_CERTIFICATE" | base64 -d > /tmp/cert.p12
+          security import /tmp/cert.p12 -k "$KEYCHAIN_PATH" -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm /tmp/cert.p12
 
-          # 임시 키체인 생성 및 인증서 import
-          security create-keychain -p "debug" /tmp/debug.keychain-db
-          security set-keychain-settings -lut 21600 /tmp/debug.keychain-db
-          security unlock-keychain -p "debug" /tmp/debug.keychain-db
-          security import /tmp/cert.p12 -k /tmp/debug.keychain-db -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S "apple-tool:,apple:" -s -k "debug" /tmp/debug.keychain-db
+          # 3. 키체인 검색 목록에 추가 (기존 키체인 유지!)
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
 
-          # 현재 키체인 검색 목록에 추가
-          security list-keychains -d user -s /tmp/debug.keychain-db $(security list-keychains -d user | tr -d '"')
+          # 4. 키 파티션 목록 설정 (codesign 접근 허용)
+          security set-key-partition-list -S "apple-tool:,apple:" -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          echo ""
-          echo "=== 코드서명 가능한 Identity ==="
-          security find-identity -v -p codesigning /tmp/debug.keychain-db || echo "❌ codesigning identity 없음"
+          # 5. signing identity 확인
+          echo "=== Signing Identities ==="
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
-          echo ""
-          echo "=== 모든 Identity ==="
-          security find-identity -v /tmp/debug.keychain-db || echo "❌ identity 없음"
-
-          echo ""
-          echo "=== 인증서 상세 (Subject / Issuer) ==="
-          security find-certificate -a -p /tmp/debug.keychain-db | openssl x509 -subject -issuer -dates -noout 2>/dev/null || echo "인증서 파싱 실패"
-
-          echo ""
-          echo "=== 인증서 Key Usage ==="
-          security find-certificate -a -p /tmp/debug.keychain-db | openssl x509 -text -noout 2>/dev/null | grep -A2 "Key Usage" || echo "Key Usage 없음"
-
-          # 정리
-          security delete-keychain /tmp/debug.keychain-db
-          rm -f /tmp/cert.p12
+          # 6. 환경변수 저장
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
         env:
           IOS_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
+      - name: Install Provisioning Profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 -d > /tmp/temp.mobileprovision
+
+          # UUID 추출 및 프로파일 설치
+          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin <<< "$(security cms -D -i /tmp/temp.mobileprovision)")
+          cp /tmp/temp.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          rm /tmp/temp.mobileprovision
+
+          echo "Provisioning Profile UUID: $UUID"
+          echo "PROVISIONING_PROFILE_UUID=$UUID" >> $GITHUB_ENV
+
+      - name: Initialize iOS target
+        run: npx tauri ios init
+        env:
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+
+      - name: Patch Xcode project for Manual Signing
+        run: |
+          PBXPROJ="src-tauri/gen/apple/task-manager.xcodeproj/project.pbxproj"
+          TEAM_ID="${{ secrets.APPLE_DEVELOPMENT_TEAM }}"
+          PP_UUID="${{ env.PROVISIONING_PROFILE_UUID }}"
+
+          echo "Patching pbxproj for Manual Signing..."
+
+          python3 << 'PYEOF'
+import os, re
+
+pbxproj = "src-tauri/gen/apple/task-manager.xcodeproj/project.pbxproj"
+team = os.environ["TEAM_ID"]
+uuid = os.environ["PP_UUID"]
+
+with open(pbxproj) as f:
+    content = f.read()
+
+def patch(match):
+    b = match.group(0)
+    pairs = {
+        "CODE_SIGN_STYLE": "Manual",
+        "CODE_SIGN_IDENTITY": '"iPhone Developer"',
+        "PROVISIONING_PROFILE_SPECIFIER": f'"{uuid}"',
+    }
+    b = re.sub(r'DEVELOPMENT_TEAM = [^;]*;', f'DEVELOPMENT_TEAM = {team};', b)
+    for k, v in pairs.items():
+        p = rf'{k} = [^;]*;'
+        if re.search(p, b):
+            b = re.sub(p, f'{k} = {v};', b)
+        else:
+            b = b.replace('buildSettings = {', f'buildSettings = {{\n\t\t\t\t{k} = {v};', 1)
+    return b
+
+content = re.sub(r'buildSettings = \{[^}]+\}', patch, content, flags=re.DOTALL)
+
+with open(pbxproj, "w") as f:
+    f.write(content)
+print("pbxproj patched successfully")
+PYEOF
+
+          # 패치 결과 확인
+          echo "=== Verification ==="
+          grep -n "CODE_SIGN_STYLE\|PROVISIONING_PROFILE_SPECIFIER\|DEVELOPMENT_TEAM" "$PBXPROJ" | head -20
+        env:
+          TEAM_ID: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          PP_UUID: ${{ env.PROVISIONING_PROFILE_UUID }}
+
       - name: Build iOS IPA
-        # Tauri 공식 Manual Signing 방식:
-        # IOS_CERTIFICATE, IOS_CERTIFICATE_PASSWORD, IOS_MOBILE_PROVISION 환경변수를
-        # 설정하면 Tauri CLI가 자동으로 Manual 서명을 처리함
-        # (수동 pbxproj 패치, 프로비저닝 프로파일 설치 불필요)
-        # 참고: https://tauri.app/distribute/sign/ios/#manual-signing
+        # IOS_CERTIFICATE를 설정하지 않아 Tauri의 내부 키체인 관리를 건너뜀
+        # 코드서명은 위에서 수동 설정한 키체인 + pbxproj 패치로 처리됨
         run: npx tauri ios build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
-          IOS_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          IOS_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          IOS_MOBILE_PROVISION: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+
+      - name: Cleanup Keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 
       - name: Upload iOS Artifacts
         uses: actions/upload-artifact@v4
