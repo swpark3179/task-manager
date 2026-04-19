@@ -150,3 +150,18 @@ export function hasIncompleteTasks(task: Task): boolean {
 }
 
 
+
+export function getLeafTasks(tasks: Task[]): Task[] {
+  const result: Task[] = [];
+  const traverse = (list: Task[]) => {
+    for (const task of list) {
+      if (task.children && task.children.length > 0) {
+        traverse(task.children);
+      } else {
+        result.push(task);
+      }
+    }
+  };
+  traverse(tasks);
+  return result;
+}

@@ -1,7 +1,8 @@
 import type { Task } from '../../types';
 import TaskTree from './TaskTree';
 import TaskInput from './TaskInput';
-import { calculateStatusSummary } from '../../utils/taskUtils';
+import { calculateStatusSummary, getLeafTasks } from '../../utils/taskUtils';
+import { useState } from 'react';
 import './Tasks.css';
 
 interface TaskListProps {
@@ -22,7 +23,9 @@ export default function TaskList({
   tasks, loading, onAddTask, onComplete, onUncomplete, onDiscard,
   onDelete, onUpdate, onAddChild, onSaveDescription
 }: TaskListProps) {
+  const [viewMode, setViewMode] = useState<'tree' | 'leaf'>('tree');
   const summary = calculateStatusSummary(tasks);
+  const displayTasks = viewMode === 'tree' ? tasks : getLeafTasks(tasks);
 
   return (
     <div className="task-list">
@@ -45,8 +48,26 @@ export default function TaskList({
               폐기 {summary.discarded}
             </span>
           )}
+
           <div style={{ flex: 1 }} />
+          <div className="view-mode-toggle" style={{ display: 'flex', gap: '4px', marginRight: 'var(--space-md)' }}>
+            <button
+              className={`btn btn-sm ${viewMode === 'tree' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setViewMode('tree')}
+              title="트리 뷰"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            </button>
+            <button
+              className={`btn btn-sm ${viewMode === 'leaf' ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setViewMode('leaf')}
+              title="리스트 뷰"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
+          </div>
           <div className="progress-bar" style={{ width: '120px' }}>
+
             <div
               className={`progress-bar-fill ${summary.completed === summary.total - summary.discarded ? 'completed' : 'in-progress'}`}
               style={{
@@ -90,7 +111,7 @@ export default function TaskList({
       {/* Task tree */}
       {tasks.length > 0 && (
         <TaskTree
-          tasks={tasks}
+          tasks={displayTasks}
 
           onComplete={onComplete}
           onUncomplete={onUncomplete}
