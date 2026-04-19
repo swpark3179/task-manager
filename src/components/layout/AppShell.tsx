@@ -1,10 +1,22 @@
+import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MobileNav from './MobileNav';
-import SyncIndicator from '../common/SyncIndicator';
 import './Layout.css';
 
 export default function AppShell() {
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  useEffect(() => {
+    const handleSyncStatus = (status: string) => {
+      setIsSyncing(status === 'syncing');
+    };
+    (window as unknown as Record<string, unknown>).__setSyncStatus = handleSyncStatus;
+    return () => {
+      delete (window as unknown as Record<string, unknown>).__setSyncStatus;
+    };
+  }, []);
+
   return (
     <div className="app-shell">
       <Sidebar />
@@ -20,7 +32,6 @@ export default function AppShell() {
             </div>
           </div>
           <div className="main-header-right">
-            <SyncIndicator />
           </div>
         </header>
         <div className="main-body">
@@ -28,6 +39,12 @@ export default function AppShell() {
         </div>
       </main>
       <MobileNav />
+      {isSyncing && (
+        <div className="global-sync-overlay">
+          <div className="global-sync-spinner"></div>
+          <p>동기화 중입니다...</p>
+        </div>
+      )}
     </div>
   );
 }
