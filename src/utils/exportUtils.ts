@@ -1,4 +1,4 @@
-import type { Task, ProgressLog } from '../types';
+import type { Task } from '../types';
 import { getStatusLabel } from './taskUtils';
 import { formatDateFull } from './dateUtils';
 
@@ -9,7 +9,6 @@ import { formatDateFull } from './dateUtils';
 
 interface ExportData {
   tasks: Task[];
-  progressLogs: ProgressLog[];
   userEmail: string;
 }
 
@@ -17,7 +16,7 @@ interface ExportData {
  * Generate a full Markdown export of all tasks and progress logs.
  */
 export function generateMarkdownExport(data: ExportData): string {
-  const { tasks, progressLogs, userEmail } = data;
+  const { tasks, userEmail } = data;
   const now = new Date().toLocaleString('ko-KR');
 
   const lines: string[] = [];
@@ -38,14 +37,6 @@ export function generateMarkdownExport(data: ExportData): string {
     tasksByDate.get(date)!.push(task);
   }
 
-  // Create progress log lookup
-  const logsByTaskId = new Map<string, ProgressLog[]>();
-  for (const log of progressLogs) {
-    if (!logsByTaskId.has(log.task_id)) {
-      logsByTaskId.set(log.task_id, []);
-    }
-    logsByTaskId.get(log.task_id)!.push(log);
-  }
 
   // Sort dates descending
   const sortedDates = Array.from(tasksByDate.keys()).sort((a, b) => b.localeCompare(a));
@@ -59,7 +50,7 @@ export function generateMarkdownExport(data: ExportData): string {
     const rootTasks = dateTasks.filter(t => !t.parent_id);
 
     for (const task of rootTasks) {
-      renderTaskExport(task, dateTasks, logsByTaskId, lines, 0);
+      renderTaskExport(task, dateTasks, lines, 0);
     }
 
     lines.push('---');
@@ -72,7 +63,6 @@ export function generateMarkdownExport(data: ExportData): string {
 function renderTaskExport(
   task: Task,
   allTasks: Task[],
-  logsByTaskId: Map<string, ProgressLog[]>,
   lines: string[],
   depth: number
 ): void {
@@ -93,22 +83,12 @@ function renderTaskExport(
     lines.push(`${indent}  ${task.description.replace(/\n/g, `\n${indent}  `)}`);
   }
 
-  // Progress logs
-  const logs = logsByTaskId.get(task.id);
-  if (logs && logs.length > 0) {
-    lines.push(`${indent}- **수행 기록**:`);
-    const sortedLogs = [...logs].sort((a, b) => a.log_date.localeCompare(b.log_date));
-    for (const log of sortedLogs) {
-      lines.push(`${indent}  - [${log.log_date}] ${log.content.split('\n')[0]}`);
-    }
-  }
-
   // Children
   const children = allTasks.filter(t => t.parent_id === task.id);
   if (children.length > 0) {
     lines.push(`${indent}- **하위 작업**:`);
     for (const child of children) {
-      renderTaskExport(child, allTasks, logsByTaskId, lines, depth + 1);
+      renderTaskExport(child, allTasks, lines, depth + 1);
     }
   }
 

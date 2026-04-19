@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import TaskList from '../components/tasks/TaskList';
 import {
   fetchTasksByDate, updateTask, deleteTask,
-  completeTask, uncompleteTask, discardTask, upsertProgressLog, createTask
+  completeTask, uncompleteTask, discardTask, createTask
 } from '../lib/database';
 import { formatDateFull, getNextDay, getPrevDay, getTodayString } from '../utils/dateUtils';
 import type { Task } from '../types';
@@ -66,7 +66,7 @@ export default function HistoryPage() {
       <div className="page-content">
         <TaskList
           tasks={tasks}
-          today={today}
+
           loading={loading}
           onAddTask={async (title) => { await createTask({ title, created_date: viewDate }); await loadTasks(); }}
           onComplete={async (id) => { await completeTask(id); await loadTasks(); }}
@@ -75,7 +75,6 @@ export default function HistoryPage() {
           onDelete={async (id) => { if (confirm('삭제하시겠습니까?')) { await deleteTask(id); await loadTasks(); } }}
           onUpdate={async (id, title) => { await updateTask(id, { title }); await loadTasks(); }}
           onAddChild={async (parentId, title) => { await createTask({ title, parent_id: parentId, created_date: viewDate }); await loadTasks(); }}
-          onSaveProgress={async (taskId, date, content) => { await upsertProgressLog({ task_id: taskId, log_date: date, content }); await loadTasks(); }}
           onSaveDescription={async (taskId, description) => { await updateTask(taskId, { description }); await loadTasks(); }}
         />
       </div>

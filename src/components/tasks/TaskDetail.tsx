@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { Task } from '../../types';
-import ProgressLog from './ProgressLog';
 import MarkdownEditor from '../markdown/MarkdownEditor';
 import MarkdownViewer from '../markdown/MarkdownViewer';
 import TaskInput from './TaskInput';
@@ -8,23 +7,20 @@ import './Tasks.css';
 
 interface TaskDetailProps {
   task: Task;
-  today: string;
-  onSaveProgress: (taskId: string, date: string, content: string) => void;
   onSaveDescription: (taskId: string, description: string) => void;
   onAddChild: (parentId: string, title: string) => void;
 }
 
 export default function TaskDetail({
-  task, today, onSaveProgress, onSaveDescription, onAddChild
+  task, onSaveDescription, onAddChild
 }: TaskDetailProps) {
-  const [activeTab, setActiveTab] = useState<'description' | 'progress' | 'children'>('progress');
+  const [activeTab, setActiveTab] = useState<'description' | 'children'>('description');
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState(task.description || '');
 
   const isFinished = task.status === 'completed' || task.status === 'discarded';
 
   const tabs = [
-    { id: 'progress' as const, label: '수행내용', show: true },
     { id: 'description' as const, label: '세부 내용', show: true },
     { id: 'children' as const, label: '하위 할일', show: !isFinished },
   ].filter(t => t.show);
@@ -44,10 +40,7 @@ export default function TaskDetail({
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
-            {tab.id === 'progress' && task.progress_logs && task.progress_logs.length > 0 && (
-              <span className="task-detail-tab-badge">{task.progress_logs.length}</span>
-            )}
-          </button>
+            </button>
         ))}
       </div>
 
@@ -112,14 +105,7 @@ export default function TaskDetail({
           </div>
         )}
 
-        {activeTab === 'progress' && (
-          <ProgressLog
-            task={task}
-            today={today}
-            onSave={onSaveProgress}
-            readOnly={isFinished}
-          />
-        )}
+
 
         {activeTab === 'children' && (
           <div className="task-detail-section">

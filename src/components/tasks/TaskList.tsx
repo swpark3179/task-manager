@@ -6,7 +6,7 @@ import './Tasks.css';
 
 interface TaskListProps {
   tasks: Task[];
-  today: string;
+
   loading: boolean;
   onAddTask: (title: string) => void;
   onComplete: (id: string) => void;
@@ -15,13 +15,12 @@ interface TaskListProps {
   onDelete: (id: string) => void;
   onUpdate: (id: string, title: string) => void;
   onAddChild: (parentId: string, title: string) => void;
-  onSaveProgress: (taskId: string, date: string, content: string) => void;
   onSaveDescription: (taskId: string, description: string) => void;
 }
 
 export default function TaskList({
-  tasks, today, loading, onAddTask, onComplete, onUncomplete, onDiscard,
-  onDelete, onUpdate, onAddChild, onSaveProgress, onSaveDescription
+  tasks, loading, onAddTask, onComplete, onUncomplete, onDiscard,
+  onDelete, onUpdate, onAddChild, onSaveDescription
 }: TaskListProps) {
   const summary = calculateStatusSummary(tasks);
 
@@ -92,14 +91,14 @@ export default function TaskList({
       {tasks.length > 0 && (
         <TaskTree
           tasks={tasks}
-          today={today}
+
           onComplete={onComplete}
           onUncomplete={onUncomplete}
           onDiscard={onDiscard}
           onDelete={onDelete}
           onUpdate={onUpdate}
           onAddChild={onAddChild}
-          onSaveProgress={onSaveProgress}
+
           onSaveDescription={onSaveDescription}
           showAddInput={false}
         />

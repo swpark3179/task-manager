@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase } from 'idb';
-import type { Task, ProgressLog, CalendarCellData } from '../types';
+import type { Task, CalendarCellData } from '../types';
 
 // =============================================
 // IndexedDB Cache Module
@@ -282,13 +282,6 @@ export const taskCache = {
   }
 };
 
-export const progressLogCache = {
-  get: (taskId: string) =>
-    getCached<ProgressLog[]>('progressLogs', taskId, CACHE_TTL.progressLogs),
-  set: (taskId: string, logs: ProgressLog[]) =>
-    setCache('progressLogs', taskId, logs),
-  invalidate: (taskId?: string) => invalidateCache('progressLogs', taskId),
-};
 
 export const calendarCache = {
   get: (yearMonth: string) =>
