@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { taskCache, calendarCache, updateTaskInAllCaches, removeTaskFromAllCaches } from './cache';
+import { taskCache, calendarCache, updateTaskInAllCaches, removeTaskFromAllCaches, clearAllCaches } from './cache';
 import { v4 as uuidv4 } from 'uuid';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
@@ -480,5 +480,11 @@ export async function fetchAllDataForExport(): Promise<{
     return {
       tasks: data || [],
     };
+  });
+}
+
+export async function forceSync(): Promise<void> {
+  return withSyncStatus(async () => {
+    await clearAllCaches();
   });
 }
