@@ -29,6 +29,7 @@ export interface DailyTaskSnapshot {
   snapshot_date: string;
   status: TaskStatus;
   created_at: string;
+  title?: string;
 }
 
 export interface ProxySettings {

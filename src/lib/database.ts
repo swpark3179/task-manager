@@ -377,7 +377,7 @@ export async function fetchCalendarData(year: number, month: number): Promise<Ca
     // Get snapshots for the month
     const { data: snapshots, error } = await supabase
       .from('daily_task_snapshots')
-      .select('*')
+      .select('*, tasks(title)')
       .eq('user_id', userId)
       .gte('snapshot_date', startDate)
       .lte('snapshot_date', endDate);
@@ -387,7 +387,7 @@ export async function fetchCalendarData(year: number, month: number): Promise<Ca
     // Also get current tasks that are on dates in this month
     const { data: tasks } = await supabase
       .from('tasks')
-      .select('id, status, created_date')
+      .select('id, status, created_date, title')
       .eq('user_id', userId)
       .gte('created_date', startDate)
       .lte('created_date', endDate);
@@ -404,7 +404,10 @@ export async function fetchCalendarData(year: number, month: number): Promise<Ca
           summary: { total: 0, completed: 0, inProgress: 0, pending: 0, discarded: 0 },
         });
       }
-      dateMap.get(snap.snapshot_date)!.tasks.push(snap);
+      dateMap.get(snap.snapshot_date)!.tasks.push({
+        ...snap,
+        title: (snap as any).tasks?.title || '',
+      });
     }
 
     // Process current tasks
@@ -424,6 +427,7 @@ export async function fetchCalendarData(year: number, month: number): Promise<Ca
         snapshot_date: date,
         status: task.status,
         created_at: '',
+        title: task.title,
       });
     }
 

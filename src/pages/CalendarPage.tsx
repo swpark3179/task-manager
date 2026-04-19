@@ -109,16 +109,20 @@ export default function CalendarPage() {
               onClick={() => handleCellClick(dateStr)}
             >
               <span className="calendar-cell-date">{date.getDate()}</span>
-              {cellData && cellData.summary.total > 0 && (
-                <div className="calendar-cell-dots">
-                  {cellData.summary.completed > 0 && (
-                    <span className="calendar-dot completed" title={`완료 ${cellData.summary.completed}`}>●</span>
-                  )}
-                  {cellData.summary.inProgress > 0 && (
-                    <span className="calendar-dot in-progress" title={`진행 ${cellData.summary.inProgress}`}>◐</span>
-                  )}
-                  {cellData.summary.pending > 0 && (
-                    <span className="calendar-dot pending" title={`대기 ${cellData.summary.pending}`}>○</span>
+              {cellData && cellData.tasks && cellData.tasks.length > 0 && (
+                <div className="calendar-cell-tasks">
+                  {cellData.tasks.slice(0, 3).map((task) => (
+                    <div key={task.id} className={`calendar-task-item ${task.status}`}>
+                      <span className="calendar-task-dot">
+                        {task.status === 'completed' && '●'}
+                        {task.status === 'in_progress' && '◐'}
+                        {task.status === 'pending' && '○'}
+                      </span>
+                      <span className="calendar-task-title">{task.title || '제목 없음'}</span>
+                    </div>
+                  ))}
+                  {cellData.tasks.length > 3 && (
+                    <div className="calendar-task-more">+{cellData.tasks.length - 3}</div>
                   )}
                 </div>
               )}

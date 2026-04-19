@@ -240,3 +240,53 @@
     padding: var(--space-md);
   }
 }
+
+.calendar-cell-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+  overflow: hidden;
+}
+
+.calendar-task-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.65rem;
+  padding: 2px 4px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+}
+
+.calendar-task-item.completed .calendar-task-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.calendar-task-dot {
+  font-size: 0.5rem;
+  flex-shrink: 0;
+}
+
+.calendar-task-item.completed .calendar-task-dot { color: var(--nord14); }
+.calendar-task-item.in_progress .calendar-task-dot { color: var(--nord13); }
+.calendar-task-item.pending .calendar-task-dot { color: var(--nord4); }
+
+.calendar-task-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-task-more {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 2px;
+  font-weight: 500;
+}
