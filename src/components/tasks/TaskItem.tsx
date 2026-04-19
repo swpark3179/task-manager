@@ -122,27 +122,23 @@ export default function TaskItem({
         <div className="task-item-detail animate-fade-in-up">
           <TaskDetail
             task={task}
-
-
             onSaveDescription={onSaveDescription}
             onAddChild={onAddChild}
-          />
-
-          {isParent && (
-            <TaskTree
-              tasks={task.children!}
-
-              depth={depth + 1}
-              onComplete={onComplete}
-              onUncomplete={onUncomplete}
-              onDiscard={onDiscard}
-              onDelete={onDelete}
-              onUpdate={onUpdate}
-              onAddChild={onAddChild}
-
-              onSaveDescription={onSaveDescription}
-            />
-          )}
+          >
+            {isParent && (
+              <TaskTree
+                tasks={task.children!}
+                depth={depth + 1}
+                onComplete={onComplete}
+                onUncomplete={onUncomplete}
+                onDiscard={onDiscard}
+                onDelete={onDelete}
+                onUpdate={onUpdate}
+                onAddChild={onAddChild}
+                onSaveDescription={onSaveDescription}
+              />
+            )}
+          </TaskDetail>
         </div>
       )}
     </div>

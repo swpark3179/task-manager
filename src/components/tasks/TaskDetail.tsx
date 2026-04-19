@@ -5,7 +5,10 @@ import MarkdownViewer from '../markdown/MarkdownViewer';
 import TaskInput from './TaskInput';
 import './Tasks.css';
 
+import type { ReactNode } from 'react';
+
 interface TaskDetailProps {
+  children?: ReactNode;
   task: Task;
   onSaveDescription: (taskId: string, description: string) => void;
   onAddChild: (parentId: string, title: string) => void;
@@ -13,6 +16,7 @@ interface TaskDetailProps {
 
 export default function TaskDetail({
   task, onSaveDescription, onAddChild
+, children
 }: TaskDetailProps) {
   const [activeTab, setActiveTab] = useState<'description' | 'children'>('description');
   const [editingDescription, setEditingDescription] = useState(false);
@@ -20,9 +24,16 @@ export default function TaskDetail({
 
   const isFinished = task.status === 'completed' || task.status === 'discarded';
 
+  const activeChildren = task.children?.filter(c => c.status !== 'discarded') || [];
+  const remainingCount = activeChildren.filter(c => c.status !== 'completed').length;
+  const childrenTabLabel = activeChildren.length > 0 && remainingCount > 0
+    ? `하위 할일 (${remainingCount})`
+    : '하위 할일';
+
+
   const tabs = [
     { id: 'description' as const, label: '세부 내용', show: true },
-    { id: 'children' as const, label: '하위 할일', show: !isFinished },
+    { id: 'children' as const, label: childrenTabLabel, show: !isFinished || (task.children && task.children.length > 0) },
   ].filter(t => t.show);
 
   const handleSaveDescription = () => {
@@ -109,11 +120,14 @@ export default function TaskDetail({
 
         {activeTab === 'children' && (
           <div className="task-detail-section">
-            <TaskInput
-              parentId={task.id}
-              onAdd={(title) => onAddChild(task.id, title)}
-              placeholder="하위 할일 추가..."
-            />
+            {children}
+            {!isFinished && (
+              <TaskInput
+                parentId={task.id}
+                onAdd={(title) => onAddChild(task.id, title)}
+                placeholder="하위 할일 추가..."
+              />
+            )}
           </div>
         )}
       </div>
