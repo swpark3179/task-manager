@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import TaskList from '../components/tasks/TaskList';
+import { useNavigate } from 'react-router-dom';
 // Auth context available if needed
 
 import {
   fetchTasksByDate, createTask, updateTask, deleteTask,
   completeTask, uncompleteTask, discardTask, rolloverTasks
 } from '../lib/database';
-import { getTodayString, formatDateDisplay } from '../utils/dateUtils';
+import { getTodayString, formatDateDisplay, getPrevDay, getNextDay } from '../utils/dateUtils';
 import type { Task } from '../types';
 import './Pages.css';
 
 export default function TodayPage() {
 
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const today = getTodayString();
@@ -129,10 +131,18 @@ export default function TodayPage() {
 
   return (
     <div className="page today-page">
-      <div className="page-header">
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 className="page-title">오늘의 할일</h1>
           <p className="page-subtitle">{formatDateDisplay(today)}</p>
+        </div>
+        <div className="date-navigator" style={{ gap: '4px', marginTop: '4px' }}>
+          <button className="date-navigator-btn" style={{ width: '28px', height: '28px' }} onClick={() => navigate(`/history/${getPrevDay(today)}`)} title="어제">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
+          </button>
+          <button className="date-navigator-btn" style={{ width: '28px', height: '28px' }} onClick={() => navigate(`/history/${getNextDay(today)}`)} title="내일">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
         </div>
       </div>
 
