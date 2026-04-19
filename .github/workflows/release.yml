@@ -201,7 +201,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '^26.0'
+          xcode-version: '16.4'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -316,7 +316,6 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
           IOS_MOBILE_PROVISION: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
-          TOOLCHAINS: com.apple.dt.toolchain.XcodeDefault
 
       - name: Cleanup Keychain
         if: always()
