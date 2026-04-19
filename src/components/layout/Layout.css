@@ -51,7 +51,6 @@
 .main-body {
   flex: 1;
   overflow-y: auto;
-  min-height: 0;
   overflow-x: hidden;
   padding: var(--space-lg);
 }
