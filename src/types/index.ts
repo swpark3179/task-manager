@@ -19,18 +19,8 @@ export interface Task {
   updated_at: string;
   // Frontend-only (not stored in DB)
   children?: Task[];
-  progress_logs?: ProgressLog[];
 }
 
-export interface ProgressLog {
-  id: string;
-  user_id: string;
-  task_id: string;
-  log_date: string;
-  content: string;
-  created_at: string;
-  updated_at: string;
-}
 
 export interface DailyTaskSnapshot {
   id: string;
@@ -86,8 +76,3 @@ export interface UpdateTaskInput {
   created_date?: string;
 }
 
-export interface UpsertProgressLogInput {
-  task_id: string;
-  log_date: string;
-  content: string;
-}

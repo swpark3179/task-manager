@@ -83,10 +83,9 @@ export default function SettingsPage() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const { tasks, progressLogs } = await fetchAllDataForExport();
+      const { tasks } = await fetchAllDataForExport();
       const markdown = generateMarkdownExport({
         tasks,
-        progressLogs,
         userEmail: user?.email || 'unknown',
       });
 

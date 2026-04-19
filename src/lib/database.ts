@@ -1,12 +1,12 @@
 import { supabase } from './supabase';
-import { taskCache, progressLogCache, calendarCache, updateTaskInAllCaches, removeTaskFromAllCaches, getTaskFromAllCaches } from './cache';
+import { taskCache, calendarCache, updateTaskInAllCaches, removeTaskFromAllCaches } from './cache';
 import { v4 as uuidv4 } from 'uuid';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
 import { getTodayString } from '../utils/dateUtils';
 import type {
-  Task, ProgressLog, CalendarCellData,
-  CreateTaskInput, UpdateTaskInput, UpsertProgressLogInput, TaskStatusSummary
+  Task, CalendarCellData,
+  CreateTaskInput, UpdateTaskInput, TaskStatusSummary
 } from '../types';
 
 // =============================================
@@ -60,7 +60,9 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
   setSyncStatus('syncing');
   try {
     const userId = await getCurrentUserId();
-    const { data, error } = await supabase
+
+    // Get tasks created on this date
+    const { data: currentTasks, error } = await supabase
       .from('tasks')
       .select('*')
       .eq('user_id', userId)
@@ -69,19 +71,29 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
 
     if (error) throw error;
 
-    const tasks = data || [];
+    // Get snapshots for this date to include tasks worked on but created on another date
+    const { data: snapshots } = await supabase
+      .from('daily_task_snapshots')
+      .select('task_id, status')
+      .eq('user_id', userId)
+      .eq('snapshot_date', date);
 
-    if (tasks.length > 0) {
-      const taskIds = tasks.map(t => t.id);
-      const { data: logs } = await supabase
-        .from('progress_logs')
-        .select('*')
-        .in('task_id', taskIds)
-        .order('log_date', { ascending: true });
+    let tasks = currentTasks || [];
 
-      if (logs) {
-        for (const task of tasks) {
-          task.progress_logs = logs.filter(l => l.task_id === task.id);
+    if (snapshots && snapshots.length > 0) {
+      const snapshotTaskIds = snapshots.map(s => s.task_id);
+      const currentTaskIds = new Set(tasks.map(t => t.id));
+
+      const missingTaskIds = snapshotTaskIds.filter(id => !currentTaskIds.has(id));
+
+      if (missingTaskIds.length > 0) {
+        const { data: pastTasks } = await supabase
+          .from('tasks')
+          .select('*')
+          .in('id', missingTaskIds);
+
+        if (pastTasks) {
+          tasks = [...tasks, ...pastTasks];
         }
       }
     }
@@ -98,29 +110,39 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
 async function revalidateTasksByDate(date: string): Promise<void> {
   try {
     const userId = await getCurrentUserId();
-    const { data } = await supabase
+    const { data: currentTasks } = await supabase
       .from('tasks')
       .select('*')
       .eq('user_id', userId)
       .eq('created_date', date)
       .order('sort_order', { ascending: true });
 
-    if (data) {
-      const tasks = data;
-      if (tasks.length > 0) {
-        const taskIds = tasks.map(t => t.id);
-        const { data: logs } = await supabase
-          .from('progress_logs')
-          .select('*')
-          .in('task_id', taskIds)
-          .order('log_date', { ascending: true });
+    if (currentTasks) {
+      let tasks = currentTasks;
 
-        if (logs) {
-          for (const task of tasks) {
-            task.progress_logs = logs.filter(l => l.task_id === task.id);
+      const { data: snapshots } = await supabase
+        .from('daily_task_snapshots')
+        .select('task_id')
+        .eq('user_id', userId)
+        .eq('snapshot_date', date);
+
+      if (snapshots && snapshots.length > 0) {
+        const snapshotTaskIds = snapshots.map(s => s.task_id);
+        const currentTaskIds = new Set(tasks.map(t => t.id));
+        const missingTaskIds = snapshotTaskIds.filter(id => !currentTaskIds.has(id));
+
+        if (missingTaskIds.length > 0) {
+          const { data: pastTasks } = await supabase
+            .from('tasks')
+            .select('*')
+            .in('id', missingTaskIds);
+
+          if (pastTasks) {
+            tasks = [...tasks, ...pastTasks];
           }
         }
       }
+
       await taskCache.set(date, tasks);
     }
   } catch {
@@ -147,8 +169,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     children: [],
-    progress_logs: []
-  };
+    };
 
   // Optimistic update
   await taskCache.addTask(createdDate, newTask);
@@ -231,42 +252,11 @@ export async function completeTask(id: string): Promise<void> {
   await calendarCache.invalidate();
 
   runBackgroundSync(async () => {
-    const { data: logs } = await supabase
-      .from('progress_logs')
-      .select('*')
-      .eq('task_id', id)
-      .order('log_date', { ascending: true });
-
-    let mergedContent = '';
-    if (logs && logs.length > 0) {
-      mergedContent = logs
-        .map(log => `### ${log.log_date}\n\n${log.content}`)
-        .join('\n\n---\n\n');
-    }
-
     const updates: UpdateTaskInput = {
       status: 'completed',
       completed_at: now,
     };
-
-    if (mergedContent) {
-      const { data: t } = await supabase
-        .from('tasks')
-        .select('description')
-        .eq('id', id)
-        .single();
-
-      const existingDesc = t?.description || '';
-      updates.description = existingDesc
-        ? `${existingDesc}\n\n---\n\n## 수행 기록\n\n${mergedContent}`
-        : `## 수행 기록\n\n${mergedContent}`;
-    }
-
-    const { error } = await supabase
-      .from('tasks')
-      .update(updates)
-      .eq('id', id);
-
+    const { error } = await supabase.from('tasks').update(updates).eq('id', id);
     if (error) throw error;
   });
 }
@@ -297,74 +287,6 @@ export async function discardTask(id: string): Promise<void> {
 // Progress Logs
 // =============================================
 
-export async function fetchProgressLogs(taskId: string): Promise<ProgressLog[]> {
-  const cached = await progressLogCache.get(taskId);
-  if (cached) return cached;
-
-  try {
-    const { data, error } = await supabase
-      .from('progress_logs')
-      .select('*')
-      .eq('task_id', taskId)
-      .order('log_date', { ascending: true });
-
-    if (error) throw error;
-
-    const logs = data || [];
-    await progressLogCache.set(taskId, logs);
-    return logs;
-  } catch (err) {
-    throw err;
-  }
-}
-
-export async function upsertProgressLog(input: UpsertProgressLogInput): Promise<void> {
-  const userId = await getCurrentUserId();
-
-  // Optimistic local change (we don't strictly update task progress logs here, but we could)
-  // Actually, we'll just invalidate cache and rely on background sync to eventually fix it,
-  // OR we can fetch cache and update. For progress logs, it's safer to just background sync
-  // and trigger a re-fetch or just background update cache.
-  // Wait, the UI updates instantly if loadTasks is called.
-  // Let's just do task status update optimistically if pending.
-
-  const task = await getTaskFromAllCaches(input.task_id);
-  if (task && task.status === 'pending') {
-    await updateTaskInAllCaches(input.task_id, { status: 'in_progress' });
-    await calendarCache.invalidate();
-  }
-
-  runBackgroundSync(async () => {
-    const { error } = await supabase
-      .from('progress_logs')
-      .upsert(
-        {
-          user_id: userId,
-          task_id: input.task_id,
-          log_date: input.log_date,
-          content: input.content,
-        },
-        { onConflict: 'task_id,log_date' }
-      );
-
-    if (error) throw error;
-    await progressLogCache.invalidate(input.task_id);
-
-    // Auto-update task status to in_progress if pending
-    const { data: t } = await supabase
-      .from('tasks')
-      .select('status')
-      .eq('id', input.task_id)
-      .single();
-
-    if (t && t.status === 'pending') {
-      await supabase
-        .from('tasks')
-        .update({ status: 'in_progress' })
-        .eq('id', input.task_id);
-    }
-  });
-}
 
 // =============================================
 // Daily Rollover
@@ -542,31 +464,21 @@ async function revalidateCalendarData(year: number, month: number): Promise<void
 
 export async function fetchAllDataForExport(): Promise<{
   tasks: Task[];
-  progressLogs: ProgressLog[];
 }> {
   return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
 
-    const [tasksResult, logsResult] = await Promise.all([
-      supabase
-        .from('tasks')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_date', { ascending: false })
-        .order('sort_order', { ascending: true }),
-      supabase
-        .from('progress_logs')
-        .select('*')
-        .eq('user_id', userId)
-        .order('log_date', { ascending: true }),
-    ]);
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_date', { ascending: false })
+      .order('sort_order', { ascending: true });
 
-    if (tasksResult.error) throw tasksResult.error;
-    if (logsResult.error) throw logsResult.error;
+    if (error) throw error;
 
     return {
-      tasks: tasksResult.data || [],
-      progressLogs: logsResult.data || [],
+      tasks: data || [],
     };
   });
 }

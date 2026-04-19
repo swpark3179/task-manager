@@ -4,7 +4,7 @@ import TaskList from '../components/tasks/TaskList';
 
 import {
   fetchTasksByDate, createTask, updateTask, deleteTask,
-  completeTask, uncompleteTask, discardTask, upsertProgressLog, rolloverTasks
+  completeTask, uncompleteTask, discardTask, rolloverTasks
 } from '../lib/database';
 import { getTodayString, formatDateDisplay } from '../utils/dateUtils';
 import type { Task } from '../types';
@@ -118,15 +118,6 @@ export default function TodayPage() {
     }
   };
 
-  const handleSaveProgress = async (taskId: string, date: string, content: string) => {
-    try {
-      await upsertProgressLog({ task_id: taskId, log_date: date, content });
-      await loadTasks();
-    } catch (err) {
-      console.error('Failed to save progress:', err);
-    }
-  };
-
   const handleSaveDescription = async (taskId: string, description: string) => {
     try {
       await updateTask(taskId, { description });
@@ -148,7 +139,7 @@ export default function TodayPage() {
       <div className="page-content">
         <TaskList
           tasks={tasks}
-          today={today}
+
           loading={loading}
           onAddTask={handleAddTask}
           onComplete={handleComplete}
@@ -157,7 +148,6 @@ export default function TodayPage() {
           onDelete={handleDelete}
           onUpdate={handleUpdate}
           onAddChild={handleAddChild}
-          onSaveProgress={handleSaveProgress}
           onSaveDescription={handleSaveDescription}
         />
       </div>

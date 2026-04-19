@@ -5,7 +5,7 @@ import './Tasks.css';
 
 interface TaskTreeProps {
   tasks: Task[];
-  today: string;
+
   depth?: number;
   onComplete: (id: string) => void;
   onUncomplete?: (id: string) => void;
@@ -13,15 +13,14 @@ interface TaskTreeProps {
   onDelete: (id: string) => void;
   onUpdate: (id: string, title: string) => void;
   onAddChild: (parentId: string, title: string) => void;
-  onSaveProgress: (taskId: string, date: string, content: string) => void;
   onSaveDescription: (taskId: string, description: string) => void;
   parentId?: string;
   showAddInput?: boolean;
 }
 
 export default function TaskTree({
-  tasks, today, depth = 0, onComplete, onUncomplete, onDiscard, onDelete,
-  onUpdate, onAddChild, onSaveProgress, onSaveDescription,
+  tasks, depth = 0, onComplete, onUncomplete, onDiscard, onDelete,
+  onUpdate, onAddChild, onSaveDescription,
   parentId, showAddInput = true
 }: TaskTreeProps) {
   return (
@@ -30,7 +29,7 @@ export default function TaskTree({
         <TaskItem
           key={task.id}
           task={task}
-          today={today}
+
           depth={depth}
           onComplete={onComplete}
           onUncomplete={onUncomplete}
@@ -38,7 +37,7 @@ export default function TaskTree({
           onDelete={onDelete}
           onUpdate={onUpdate}
           onAddChild={onAddChild}
-          onSaveProgress={onSaveProgress}
+
           onSaveDescription={onSaveDescription}
         />
       ))}
