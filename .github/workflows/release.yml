@@ -230,7 +230,7 @@ jobs:
       - name: Remove alpha channel from iOS icons
         run: |
           brew install imagemagick
-          find src-tauri/icons/ios/ -name "*.png" -exec mogrify -background white -alpha remove -alpha off {} +
+          find src-tauri/icons/ios/ src-tauri/gen/apple/ -type f -name "*.png" -exec mogrify -background white -alpha remove -alpha off {} + || true
 
       - name: Patch Info.plist for Export Compliance
         run: |
