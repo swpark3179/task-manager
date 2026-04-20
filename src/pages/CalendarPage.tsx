@@ -14,18 +14,25 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
       setLoading(true);
       try {
-        const data = await fetchCalendarData(year, month);
-        setCalendarData(data);
+        const data = await fetchCalendarData(year, month, (fresh) => {
+          // Stale-while-revalidate: update once the background refresh resolves
+          if (!cancelled) setCalendarData(fresh);
+        });
+        if (!cancelled) setCalendarData(data);
       } catch (err) {
         console.error('Failed to load calendar data:', err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     load();
+    return () => {
+      cancelled = true;
+    };
   }, [year, month]);
 
   const grid = getMonthCalendarGrid(year, month);

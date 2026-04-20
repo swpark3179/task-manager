@@ -365,110 +365,119 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
 // Calendar Data
 // =============================================
 
-export async function fetchCalendarData(year: number, month: number): Promise<CalendarCellData[]> {
+async function fetchCalendarFromRemote(year: number, month: number): Promise<CalendarCellData[]> {
   const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
-  const cached = await calendarCache.get(yearMonth);
-  if (cached) {
-    revalidateCalendarData(year, month);
-    return cached;
+  const userId = await getCurrentUserId();
+  const startDate = `${yearMonth}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
+
+  // Get snapshots for the month (with task title via FK)
+  const { data: snapshots, error } = await supabase
+    .from('daily_task_snapshots')
+    .select('*, tasks(title)')
+    .eq('user_id', userId)
+    .gte('snapshot_date', startDate)
+    .lte('snapshot_date', endDate);
+
+  if (error) throw error;
+
+  // Also get current tasks that are on dates in this month
+  const { data: tasks, error: tasksError } = await supabase
+    .from('tasks')
+    .select('id, status, created_date, title')
+    .eq('user_id', userId)
+    .gte('created_date', startDate)
+    .lte('created_date', endDate);
+
+  if (tasksError) throw tasksError;
+
+  // Build calendar data
+  const dateMap = new Map<string, CalendarCellData>();
+
+  for (const snap of (snapshots || [])) {
+    if (!dateMap.has(snap.snapshot_date)) {
+      dateMap.set(snap.snapshot_date, {
+        date: snap.snapshot_date,
+        tasks: [],
+        summary: { total: 0, completed: 0, inProgress: 0, pending: 0, discarded: 0 },
+      });
+    }
+    dateMap.get(snap.snapshot_date)!.tasks.push({
+      ...snap,
+      title: (snap as any).tasks?.title || '',
+    });
   }
 
-  return withSyncStatus(async () => {
-    const userId = await getCurrentUserId();
-    const startDate = `${yearMonth}-01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
-
-    // Get snapshots for the month
-    const { data: snapshots, error } = await supabase
-      .from('daily_task_snapshots')
-      .select('*, tasks(title)')
-      .eq('user_id', userId)
-      .gte('snapshot_date', startDate)
-      .lte('snapshot_date', endDate);
-
-    if (error) throw error;
-
-    // Also get current tasks that are on dates in this month
-    const { data: tasks } = await supabase
-      .from('tasks')
-      .select('id, status, created_date, title')
-      .eq('user_id', userId)
-      .gte('created_date', startDate)
-      .lte('created_date', endDate);
-
-    // Build calendar data
-    const dateMap = new Map<string, CalendarCellData>();
-
-    // Process snapshots
-    for (const snap of (snapshots || [])) {
-      if (!dateMap.has(snap.snapshot_date)) {
-        dateMap.set(snap.snapshot_date, {
-          date: snap.snapshot_date,
-          tasks: [],
-          summary: { total: 0, completed: 0, inProgress: 0, pending: 0, discarded: 0 },
-        });
-      }
-      dateMap.get(snap.snapshot_date)!.tasks.push({
-        ...snap,
-        title: (snap as any).tasks?.title || '',
+  for (const task of (tasks || [])) {
+    const date = task.created_date;
+    if (!dateMap.has(date)) {
+      dateMap.set(date, {
+        date,
+        tasks: [],
+        summary: { total: 0, completed: 0, inProgress: 0, pending: 0, discarded: 0 },
       });
     }
 
-    // Process current tasks
-    for (const task of (tasks || [])) {
-      const date = task.created_date;
-      if (!dateMap.has(date)) {
-        dateMap.set(date, {
-          date,
-          tasks: [],
-          summary: { total: 0, completed: 0, inProgress: 0, pending: 0, discarded: 0 },
-        });
-      }
+    const cell = dateMap.get(date)!;
+    if (!cell.tasks.some((t) => t.task_id === task.id)) {
+      cell.tasks.push({
+        id: task.id,
+        user_id: userId,
+        task_id: task.id,
+        snapshot_date: date,
+        status: task.status,
+        created_at: '',
+        title: task.title,
+      });
+    }
+  }
 
-      const cell = dateMap.get(date)!;
-      // Prevent duplicates if snapshot already captured this task for this date
-      if (!cell.tasks.some((t) => t.task_id === task.id)) {
-        cell.tasks.push({
-          id: task.id,
-          user_id: userId,
-          task_id: task.id,
-          snapshot_date: date,
-          status: task.status,
-          created_at: '',
-          title: task.title,
-        });
+  const result = Array.from(dateMap.values());
+  for (const cell of result) {
+    const summary: TaskStatusSummary = { total: 0, completed: 0, inProgress: 0, pending: 0, discarded: 0 };
+    for (const t of cell.tasks) {
+      summary.total++;
+      switch (t.status) {
+        case 'completed': summary.completed++; break;
+        case 'in_progress': summary.inProgress++; break;
+        case 'pending': summary.pending++; break;
+        case 'discarded': summary.discarded++; break;
       }
     }
+    cell.summary = summary;
+  }
 
-    // Calculate summaries
-    const result = Array.from(dateMap.values());
-    for (const cell of result) {
-      const summary: TaskStatusSummary = { total: 0, completed: 0, inProgress: 0, pending: 0, discarded: 0 };
-      for (const t of cell.tasks) {
-        summary.total++;
-        switch (t.status) {
-          case 'completed': summary.completed++; break;
-          case 'in_progress': summary.inProgress++; break;
-          case 'pending': summary.pending++; break;
-          case 'discarded': summary.discarded++; break;
-        }
-      }
-      cell.summary = summary;
-    }
-
-    await calendarCache.set(yearMonth, result);
-    return result;
-  });
+  await calendarCache.set(yearMonth, result);
+  return result;
 }
 
-async function revalidateCalendarData(year: number, month: number): Promise<void> {
+export async function fetchCalendarData(
+  year: number,
+  month: number,
+  onRevalidated?: (data: CalendarCellData[]) => void,
+): Promise<CalendarCellData[]> {
+  const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+  const cached = await calendarCache.get(yearMonth);
+  if (cached) {
+    // Background revalidation must hit Supabase directly (not the cached entry point)
+    revalidateCalendarData(year, month, onRevalidated);
+    return cached;
+  }
+
+  return withSyncStatus(() => fetchCalendarFromRemote(year, month));
+}
+
+async function revalidateCalendarData(
+  year: number,
+  month: number,
+  onRevalidated?: (data: CalendarCellData[]) => void,
+): Promise<void> {
   try {
-    const data = await fetchCalendarData(year, month);
-    const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
-    await calendarCache.set(yearMonth, data);
-  } catch {
-    // Silent revalidation
+    const data = await fetchCalendarFromRemote(year, month);
+    if (onRevalidated) onRevalidated(data);
+  } catch (err) {
+    console.error('Calendar revalidation failed:', err);
   }
 }
 

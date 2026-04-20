@@ -283,9 +283,29 @@ export const taskCache = {
 };
 
 
+function isValidCalendarCache(data: unknown): data is CalendarCellData[] {
+  if (!Array.isArray(data)) return false;
+  // Empty array is considered valid (no entries yet for that month)
+  if (data.length === 0) return true;
+  // Reject legacy entries that predate the `tasks` field
+  return data.every(
+    (cell) =>
+      cell != null &&
+      typeof (cell as CalendarCellData).date === 'string' &&
+      Array.isArray((cell as CalendarCellData).tasks),
+  );
+}
+
 export const calendarCache = {
-  get: (yearMonth: string) =>
-    getCached<CalendarCellData[]>('calendar', yearMonth, CACHE_TTL.calendar),
+  get: async (yearMonth: string) => {
+    const data = await getCached<CalendarCellData[]>('calendar', yearMonth, CACHE_TTL.calendar);
+    if (data && !isValidCalendarCache(data)) {
+      // Discard malformed/legacy cache so it gets refetched
+      await invalidateCache('calendar', yearMonth);
+      return null;
+    }
+    return data;
+  },
   set: (yearMonth: string, data: CalendarCellData[]) =>
     setCache('calendar', yearMonth, data),
   invalidate: (yearMonth?: string) => invalidateCache('calendar', yearMonth),
