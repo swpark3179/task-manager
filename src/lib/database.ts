@@ -420,15 +420,20 @@ export async function fetchCalendarData(year: number, month: number): Promise<Ca
           summary: { total: 0, completed: 0, inProgress: 0, pending: 0, discarded: 0 },
         });
       }
-      dateMap.get(date)!.tasks.push({
-        id: task.id,
-        user_id: userId,
-        task_id: task.id,
-        snapshot_date: date,
-        status: task.status,
-        created_at: '',
-        title: task.title,
-      });
+
+      const cell = dateMap.get(date)!;
+      // Prevent duplicates if snapshot already captured this task for this date
+      if (!cell.tasks.some((t) => t.task_id === task.id)) {
+        cell.tasks.push({
+          id: task.id,
+          user_id: userId,
+          task_id: task.id,
+          snapshot_date: date,
+          status: task.status,
+          created_at: '',
+          title: task.title,
+        });
+      }
     }
 
     // Calculate summaries
