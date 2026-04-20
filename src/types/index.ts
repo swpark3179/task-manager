@@ -41,6 +41,8 @@ export interface DailyTaskSnapshot {
   status: TaskStatus;
   created_at: string;
   title?: string;
+  category_id?: string | null;
+  parent_id?: string | null;
 }
 
 export interface ProxySettings {

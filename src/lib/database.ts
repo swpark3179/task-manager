@@ -383,7 +383,7 @@ async function fetchCalendarFromRemote(year: number, month: number): Promise<Cal
   // Get snapshots for the month (with task title via FK)
   const { data: snapshots, error } = await supabase
     .from('daily_task_snapshots')
-    .select('*, tasks(title)')
+    .select('*, tasks(title, category_id, parent_id)')
     .eq('user_id', userId)
     .gte('snapshot_date', startDate)
     .lte('snapshot_date', endDate);
@@ -393,7 +393,7 @@ async function fetchCalendarFromRemote(year: number, month: number): Promise<Cal
   // Also get current tasks that are on dates in this month
   const { data: tasks, error: tasksError } = await supabase
     .from('tasks')
-    .select('id, status, created_date, title')
+    .select('id, status, created_date, title, category_id, parent_id')
     .eq('user_id', userId)
     .gte('created_date', startDate)
     .lte('created_date', endDate);
@@ -414,6 +414,8 @@ async function fetchCalendarFromRemote(year: number, month: number): Promise<Cal
     dateMap.get(snap.snapshot_date)!.tasks.push({
       ...snap,
       title: (snap as any).tasks?.title || '',
+      category_id: (snap as any).tasks?.category_id || null,
+      parent_id: (snap as any).tasks?.parent_id || null,
     });
   }
 
@@ -437,6 +439,8 @@ async function fetchCalendarFromRemote(year: number, month: number): Promise<Cal
         status: task.status,
         created_at: '',
         title: task.title,
+        category_id: task.category_id,
+        parent_id: task.parent_id,
       });
     }
   }
