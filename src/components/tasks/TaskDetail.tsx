@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { Task } from '../../types';
 import MarkdownEditor from '../markdown/MarkdownEditor';
 import MarkdownViewer from '../markdown/MarkdownViewer';
@@ -24,17 +24,17 @@ export default function TaskDetail({
 
   const isFinished = task.status === 'completed' || task.status === 'discarded';
 
-  const activeChildren = task.children?.filter(c => c.status !== 'discarded') || [];
-  const remainingCount = activeChildren.filter(c => c.status !== 'completed').length;
-  const childrenTabLabel = activeChildren.length > 0 && remainingCount > 0
+  const activeChildren = useMemo(() => task.children?.filter(c => c.status !== 'discarded') || [], [task.children]);
+  const remainingCount = useMemo(() => activeChildren.filter(c => c.status !== 'completed').length, [activeChildren]);
+  const childrenTabLabel = useMemo(() => activeChildren.length > 0 && remainingCount > 0
     ? `하위 할일 (${remainingCount})`
-    : '하위 할일';
+    : '하위 할일', [activeChildren.length, remainingCount]);
 
 
-  const tabs = [
+  const tabs = useMemo(() => [
     { id: 'description' as const, label: '세부 내용', show: true },
     { id: 'children' as const, label: childrenTabLabel, show: !isFinished || (task.children && task.children.length > 0) },
-  ].filter(t => t.show);
+  ].filter(t => t.show), [childrenTabLabel, isFinished, task.children]);
 
   const handleSaveDescription = () => {
     onSaveDescription(task.id, descriptionDraft);
