@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Task } from '../../types';
+import TaskSettingsModal from './modals/TaskSettingsModal';
 import TaskCheckbox from './TaskCheckbox';
 import TaskTree from './TaskTree';
 import TaskDetail from './TaskDetail';
@@ -14,33 +15,22 @@ interface TaskItemProps {
   onUncomplete?: (id: string) => void;
   onDiscard: (id: string) => void;
   onDelete: (id: string) => void;
-  onUpdate: (id: string, title: string) => void;
+  onUpdateSettings: (id: string, updates: { title?: string; category_id?: string | null; low_priority?: boolean }) => void;
   onAddChild: (parentId: string, title: string) => void;
   onSaveDescription: (taskId: string, description: string) => void;
 }
 
 export default function TaskItem({
   task, depth = 0, onComplete, onUncomplete, onDiscard, onDelete,
-  onUpdate, onAddChild, onSaveDescription
+  onUpdateSettings, onAddChild, onSaveDescription
 }: TaskItemProps) {
   const [expanded, setExpanded] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState(task.title);
+  const [showSettings, setShowSettings] = useState(false);
 
   const isParent = hasChildren(task);
   const isCompleted = task.status === 'completed';
   const isDiscarded = task.status === 'discarded';
 
-
-  const handleTitleSave = () => {
-    const trimmed = editTitle.trim();
-    if (trimmed && trimmed !== task.title) {
-      onUpdate(task.id, trimmed);
-    } else {
-      setEditTitle(task.title);
-    }
-    setEditing(false);
-  };
 
   return (
     <div
@@ -57,30 +47,14 @@ export default function TaskItem({
         />
 
         <div className="task-item-content">
-          {editing ? (
-            <input
-              className="task-item-edit-input"
-              value={editTitle}
-              onChange={e => setEditTitle(e.target.value)}
-              onBlur={handleTitleSave}
-              onKeyDown={e => {
-                if (e.key === 'Enter') handleTitleSave();
-                if (e.key === 'Escape') { setEditTitle(task.title); setEditing(false); }
-              }}
-              onClick={e => e.stopPropagation()}
-              autoFocus
-            />
-          ) : (
-            <span
-              className={`task-item-title ${isCompleted || isDiscarded ? 'strikethrough' : ''}`}
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                if (!isCompleted && !isDiscarded) {
-                  setEditing(true);
-                }
-              }}
-            >
-              {task.title}
+          <span
+            className={`task-item-title ${isCompleted || isDiscarded ? 'strikethrough' : ''}`}
+          >
+            {task.title}
+          </span>
+          {task.low_priority && (
+            <span style={{ fontSize: '10px', backgroundColor: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-muted)' }}>
+              낮음
             </span>
           )}
 
@@ -103,6 +77,16 @@ export default function TaskItem({
             </svg>
           </button>
 
+          <button
+            className="btn btn-ghost btn-icon btn-sm task-item-settings"
+            onClick={(e) => { e.stopPropagation(); setShowSettings(true); }}
+            title="설정"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
           {!isCompleted && !isDiscarded && (
             <button
               className="btn btn-ghost btn-icon btn-sm task-item-delete"
@@ -133,13 +117,20 @@ export default function TaskItem({
                 onUncomplete={onUncomplete}
                 onDiscard={onDiscard}
                 onDelete={onDelete}
-                onUpdate={onUpdate}
+                onUpdateSettings={onUpdateSettings}
                 onAddChild={onAddChild}
                 onSaveDescription={onSaveDescription}
               />
             )}
           </TaskDetail>
         </div>
+      )}
+      {showSettings && (
+        <TaskSettingsModal
+          task={task}
+          onClose={() => setShowSettings(false)}
+          onUpdate={onUpdateSettings}
+        />
       )}
     </div>
   );

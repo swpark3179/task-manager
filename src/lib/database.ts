@@ -5,7 +5,7 @@ import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
 import { getTodayString } from '../utils/dateUtils';
 import type {
-  Task, CalendarCellData,
+  Task, Category, CalendarCellData,
   CreateTaskInput, UpdateTaskInput, TaskStatusSummary
 } from '../types';
 
@@ -160,6 +160,8 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
     user_id: userId,
     title: input.title,
     parent_id: input.parent_id || null,
+    category_id: input.category_id || null,
+    low_priority: input.low_priority || false,
     description: input.description || null,
     status: 'pending',
     created_date: createdDate,
@@ -183,6 +185,8 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
         user_id: newTask.user_id,
         title: newTask.title,
         parent_id: newTask.parent_id,
+        category_id: newTask.category_id,
+        low_priority: newTask.low_priority,
         description: newTask.description,
         created_date: newTask.created_date,
         sort_order: newTask.sort_order,
@@ -495,5 +499,61 @@ export async function fetchAllDataForExport(): Promise<{
 export async function forceSync(): Promise<void> {
   return withSyncStatus(async () => {
     await clearAllCaches();
+  });
+}
+
+// =============================================
+// Categories
+// =============================================
+
+
+
+export async function fetchCategories(): Promise<Category[]> {
+  return withSyncStatus(async () => {
+    const userId = await getCurrentUserId();
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('user_id', userId)
+      .order('name');
+
+    if (error) throw error;
+    return data || [];
+  });
+}
+
+export async function createCategory(name: string, color?: string): Promise<Category> {
+  return withSyncStatus(async () => {
+    const userId = await getCurrentUserId();
+    const { data, error } = await supabase
+      .from('categories')
+      .insert({ user_id: userId, name, color })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  });
+}
+
+export async function updateCategory(id: string, updates: { name?: string; color?: string }): Promise<void> {
+  return withSyncStatus(async () => {
+    const { error } = await supabase
+      .from('categories')
+      .update(updates)
+      .eq('id', id);
+
+    if (error) throw error;
+  });
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  return withSyncStatus(async () => {
+    const { error } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
   });
 }

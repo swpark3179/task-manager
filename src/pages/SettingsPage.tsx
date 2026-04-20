@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { fetchAllDataForExport, forceSync } from '../lib/database';
 import { generateMarkdownExport } from '../utils/exportUtils';
 import type { ProxySettings } from '../types';
+import CategoryManager from '../components/settings/CategoryManager';
 import './Pages.css';
 
 export default function SettingsPage() {
@@ -234,6 +235,17 @@ export default function SettingsPage() {
         )}
 
 
+
+        {/* Categories */}
+        <section className="settings-section card">
+          <h3 className="settings-section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            카테고리 관리
+          </h3>
+          <CategoryManager />
+        </section>
         {/* Sync */}
         <section className="settings-section card">
           <h3 className="settings-section-title">
