@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchCalendarData } from '../lib/database';
+import { fetchCalendarData, fetchCategories, createTask, updateTask } from '../lib/database';
 import { getMonthCalendarGrid, formatDate, formatMonthYear, getTodayString } from '../utils/dateUtils';
-import type { CalendarCellData } from '../types';
+import type { CalendarCellData, Category } from '../types';
+import TaskInput from '../components/tasks/TaskInput';
+import TaskSettingsModal from '../components/tasks/modals/TaskSettingsModal';
 import './Pages.css';
 
 export default function CalendarPage() {
@@ -13,6 +15,19 @@ export default function CalendarPage() {
   const [calendarData, setCalendarData] = useState<CalendarCellData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [viewMode, setViewMode] = useState<'tree' | 'leaf'>('tree');
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchCategories().then(setCategories).catch(console.error);
+  }, []);
+
+  const getCategoryColor = (categoryId?: string | null) => {
+    if (!categoryId) return undefined;
+    const cat = categories.find(c => c.id === categoryId);
+    return cat?.color || undefined;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -155,36 +170,118 @@ export default function CalendarPage() {
         </div>
       )}
       {selectedDate && (
-        <div className="modal-overlay" onClick={() => setSelectedDate(null)}>
+        <div className="modal-overlay" onClick={() => { setSelectedDate(null); setViewMode('tree'); }}>
           <div className="modal-content" onClick={(e) => {
             e.stopPropagation();
-            handleNavigate(selectedDate);
-          }}>
-            <h2 style={{ margin: 0, paddingBottom: '8px', borderBottom: '1px solid var(--border-light)' }}>
-              {selectedDate === today ? '오늘의 작업' : `${selectedDate} 작업`}
-            </h2>
-            <div className="modal-task-list">
+          }} style={{ display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '8px', borderBottom: '1px solid var(--border-light)', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0, cursor: 'pointer' }} onClick={() => handleNavigate(selectedDate)}>
+                {selectedDate === today ? '오늘의 작업' : `${selectedDate} 작업`} <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 'normal' }}>(이동하기)</span>
+              </h2>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  className={`btn btn-sm ${viewMode === 'tree' ? 'btn-primary' : 'btn-ghost'}`}
+                  onClick={() => setViewMode('tree')}
+                  title="최상위 작업"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                </button>
+                <button
+                  className={`btn btn-sm ${viewMode === 'leaf' ? 'btn-primary' : 'btn-ghost'}`}
+                  onClick={() => setViewMode('leaf')}
+                  title="최하위 작업"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-task-list" style={{ overflowY: 'auto', flex: 1 }}>
               {(() => {
-                const tasks = getCellData(selectedDate)?.tasks || [];
-                if (tasks.length === 0) {
-                  return <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>등록된 작업이 없습니다.</p>;
+                const allTasks = getCellData(selectedDate)?.tasks || [];
+
+                let displayTasks = allTasks;
+                if (viewMode === 'tree') {
+                  displayTasks = allTasks.filter(t => !t.parent_id);
+                } else {
+                  const parentIds = new Set(allTasks.map(t => t.parent_id).filter(Boolean));
+                  displayTasks = allTasks.filter(t => !parentIds.has(t.task_id));
                 }
-                return tasks.map(task => (
-                  <div key={task.id} className={`modal-task-item ${task.status}`}>
-                    <span className="calendar-task-dot">
-                      {task.status === 'completed' && '●'}
-                      {task.status === 'in_progress' && '◐'}
-                      {task.status === 'pending' && '○'}
-                    </span>
-                    <span>{task.title || '제목 없음'}</span>
-                  </div>
-                ));
+
+                if (displayTasks.length === 0) {
+                  return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0' }}>등록된 작업이 없습니다.</p>;
+                }
+
+                return displayTasks.map(task => {
+                  const catColor = getCategoryColor(task.category_id);
+                  return (
+                    <div
+                      key={task.id}
+                      className={`modal-task-item ${task.status}`}
+                      style={{ cursor: 'pointer', position: 'relative' }}
+                      onClick={() => setEditingTaskId(task.task_id)}
+                    >
+                      {catColor && (
+                        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', backgroundColor: catColor, borderRadius: '4px 0 0 4px' }} />
+                      )}
+                      <span className="calendar-task-dot" style={{ marginLeft: catColor ? '6px' : '0' }}>
+                        {task.status === 'completed' && '●'}
+                        {task.status === 'in_progress' && '◐'}
+                        {task.status === 'pending' && '○'}
+                      </span>
+                      <span>{task.title || '제목 없음'}</span>
+                    </div>
+                  );
+                });
               })()}
             </div>
-            <div className="modal-hint">클릭하여 해당 일자로 이동합니다</div>
+
+            <div style={{ marginTop: '16px', borderTop: '1px solid var(--border-light)', paddingTop: '16px' }}>
+              <TaskInput
+                onAdd={async (title) => {
+                  try {
+                    await createTask({ title, created_date: selectedDate });
+                    const freshData = await fetchCalendarData(year, month);
+                    setCalendarData(freshData);
+                  } catch (e) {
+                    console.error('Failed to create task', e);
+                  }
+                }}
+              />
+            </div>
           </div>
         </div>
       )}
+
+      {editingTaskId && (() => {
+        const selectedCellData = getCellData(selectedDate!);
+        const taskSnap = selectedCellData?.tasks.find(t => t.task_id === editingTaskId);
+        if (!taskSnap) return null;
+
+        // Convert snapshot to Task type for TaskSettingsModal
+        const mockTask: any = {
+          id: taskSnap.task_id,
+          title: taskSnap.title || '',
+          category_id: taskSnap.category_id || null,
+          low_priority: false,
+        };
+
+        return (
+          <TaskSettingsModal
+            task={mockTask}
+            onClose={() => setEditingTaskId(null)}
+            onUpdate={async (id, updates) => {
+              try {
+                await updateTask(id, updates);
+                const freshData = await fetchCalendarData(year, month);
+                setCalendarData(freshData);
+              } catch (e) {
+                console.error('Failed to update task', e);
+              }
+            }}
+          />
+        );
+      })()}
 </div>
     </div>
   );
