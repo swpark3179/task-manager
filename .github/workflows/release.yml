@@ -221,6 +221,15 @@ jobs:
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
 
+      - name: Patch Info.plist for Export Compliance
+        run: |
+          echo "Patching Info.plist for ITSAppUsesNonExemptEncryption..."
+          for plist in $(find src-tauri/gen/apple -name "Info.plist"); do
+            /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$plist" || \
+            /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$plist"
+          done
+          echo "Info.plist patched."
+
       - name: Setup Code Signing
         run: |
           # 1. 키체인 생성 및 설정
