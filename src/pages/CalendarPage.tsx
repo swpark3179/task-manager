@@ -12,6 +12,7 @@ export default function CalendarPage() {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [calendarData, setCalendarData] = useState<CalendarCellData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +60,9 @@ export default function CalendarPage() {
   };
 
   const handleCellClick = (dateStr: string) => {
+    setSelectedDate(dateStr);
+  };
+  const handleNavigate = (dateStr: string) => {
     if (dateStr === today) {
       navigate('/');
     } else {
@@ -126,7 +130,7 @@ export default function CalendarPage() {
                         {task.status === 'in_progress' && '◐'}
                         {task.status === 'pending' && '○'}
                       </span>
-                      <span className="calendar-task-title">{task.title || '제목 없음'}</span>
+                      <span className="calendar-task-title">{task.title ? (task.title.length > 3 ? task.title.slice(0, 3) + '...' : task.title) : '제목 없음'}</span>
                     </div>
                   ))}
                   {cellData.tasks.length > 3 && (
@@ -150,7 +154,38 @@ export default function CalendarPage() {
           <div className="loading-spinner" />
         </div>
       )}
-      </div>
+      {selectedDate && (
+        <div className="modal-overlay" onClick={() => setSelectedDate(null)}>
+          <div className="modal-content" onClick={(e) => {
+            e.stopPropagation();
+            handleNavigate(selectedDate);
+          }}>
+            <h2 style={{ margin: 0, paddingBottom: '8px', borderBottom: '1px solid var(--border-light)' }}>
+              {selectedDate === today ? '오늘의 작업' : `${selectedDate} 작업`}
+            </h2>
+            <div className="modal-task-list">
+              {(() => {
+                const tasks = getCellData(selectedDate)?.tasks || [];
+                if (tasks.length === 0) {
+                  return <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>등록된 작업이 없습니다.</p>;
+                }
+                return tasks.map(task => (
+                  <div key={task.id} className={`modal-task-item ${task.status}`}>
+                    <span className="calendar-task-dot">
+                      {task.status === 'completed' && '●'}
+                      {task.status === 'in_progress' && '◐'}
+                      {task.status === 'pending' && '○'}
+                    </span>
+                    <span>{task.title || '제목 없음'}</span>
+                  </div>
+                ));
+              })()}
+            </div>
+            <div className="modal-hint">클릭하여 해당 일자로 이동합니다</div>
+          </div>
+        </div>
+      )}
+</div>
     </div>
   );
 }
