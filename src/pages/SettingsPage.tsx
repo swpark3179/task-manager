@@ -144,7 +144,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="settings-sections">
+      <div className="page-content settings-sections">
         {/* Account */}
         <section className="settings-section card">
           <h3 className="settings-section-title">

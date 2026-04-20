@@ -68,6 +68,7 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      <div className="page-content">
       <div className="calendar-nav">
         <button className="date-navigator-btn" onClick={prevMonth}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
@@ -142,6 +143,7 @@ export default function CalendarPage() {
           <div className="loading-spinner" />
         </div>
       )}
+      </div>
     </div>
   );
 }
