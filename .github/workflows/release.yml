@@ -227,6 +227,11 @@ jobs:
       - name: Generate icons
         run: npx tauri icon src-tauri/icons/icon.png
 
+      - name: Remove alpha channel from iOS icons
+        run: |
+          brew install imagemagick
+          find src-tauri/icons/ios/ -name "*.png" -exec mogrify -background white -alpha remove -alpha off {} +
+
       - name: Patch Info.plist for Export Compliance
         run: |
           echo "Patching Info.plist for ITSAppUsesNonExemptEncryption..."
