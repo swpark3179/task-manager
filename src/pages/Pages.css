@@ -55,7 +55,7 @@
 
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 2px;
   background: var(--border-light);
   border-radius: var(--radius-md);
@@ -334,4 +334,35 @@
 @keyframes scaleIn {
   from { transform: scale(0.95); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
+}
+
+
+.modal-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.modal-task-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+}
+
+.modal-hint {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-top: var(--space-md);
+}
+
+.modal-task-item.completed {
+  text-decoration: line-through;
+  color: var(--text-muted);
 }
