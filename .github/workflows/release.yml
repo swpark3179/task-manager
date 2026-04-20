@@ -146,6 +146,9 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
+      - name: Generate icons
+        run: npx tauri icon src-tauri/icons/icon.png
+
       - name: Build Android APK
         run: npx tauri android build --apk
         env:
@@ -220,6 +223,9 @@ jobs:
         run: npx tauri ios init
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+
+      - name: Generate icons
+        run: npx tauri icon src-tauri/icons/icon.png
 
       - name: Patch Info.plist for Export Compliance
         run: |
