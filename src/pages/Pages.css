@@ -366,3 +366,13 @@
   text-decoration: line-through;
   color: var(--text-muted);
 }
+
+.page-content {
+  padding-bottom: 40px;
+}
+
+@media (max-width: 767px) {
+  .page-content {
+    padding-bottom: 120px;
+  }
+}
