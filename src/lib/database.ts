@@ -339,20 +339,28 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
       status: t.status,
     }));
 
+    const idsToUpdate = Array.from(allTaskIds);
+    const promises: Promise<any>[] = [];
+
     if (snapshots.length > 0) {
-      await supabase
-        .from('daily_task_snapshots')
-        .upsert(snapshots, { onConflict: 'task_id,snapshot_date' });
+      promises.push(
+        supabase
+          .from('daily_task_snapshots')
+          .upsert(snapshots, { onConflict: 'task_id,snapshot_date' }) as unknown as Promise<any>
+      );
     }
 
-    // Update created_date of all related tasks to toDate
-    const idsToUpdate = Array.from(allTaskIds);
-    const { error: updateError } = await supabase
-      .from('tasks')
-      .update({ created_date: toDate })
-      .in('id', idsToUpdate);
+    promises.push(
+      supabase
+        .from('tasks')
+        .update({ created_date: toDate })
+        .in('id', idsToUpdate) as unknown as Promise<any>
+    );
 
-    if (updateError) throw updateError;
+    const results = await Promise.all(promises);
+    for (const res of results) {
+      if (res.error) throw res.error;
+    }
 
     await taskCache.invalidate();
     await calendarCache.invalidate();
