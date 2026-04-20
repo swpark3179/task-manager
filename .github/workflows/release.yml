@@ -296,6 +296,7 @@ jobs:
                   "CODE_SIGN_IDENTITY": '"Apple Distribution"',
                   "PROVISIONING_PROFILE_SPECIFIER": f'"{uuid}"',
                   "IPHONEOS_DEPLOYMENT_TARGET": "15.0",
+                  "OTHER_LDFLAGS": '("$(inherited)", "-Wl,-U,__swift_FORCE_LOAD_$_swiftCompatibility56", "-Wl,-U,__swift_FORCE_LOAD_$_swiftCompatibilityConcurrency")'
               }
               b = re.sub(r'DEVELOPMENT_TEAM = [^;]*;', f'DEVELOPMENT_TEAM = {team};', b)
               for k, v in pairs.items():
@@ -315,7 +316,7 @@ jobs:
 
           # 패치 결과 확인
           echo "=== Verification ==="
-          grep -n "CODE_SIGN_STYLE\|PROVISIONING_PROFILE_SPECIFIER\|DEVELOPMENT_TEAM" "$PBXPROJ" | head -20
+          grep -n "CODE_SIGN_STYLE\|PROVISIONING_PROFILE_SPECIFIER\|DEVELOPMENT_TEAM\|IPHONEOS_DEPLOYMENT_TARGET\|OTHER_LDFLAGS" "$PBXPROJ" | head -25
 
       - name: Build iOS IPA
         # IOS_CERTIFICATE 미설정 → Tauri의 키체인 관리 건너뜀 (수동 키체인 사용)
