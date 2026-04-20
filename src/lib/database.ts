@@ -376,7 +376,8 @@ export async function fetchCalendarData(year: number, month: number): Promise<Ca
   return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
     const startDate = `${yearMonth}-01`;
-    const endDate = `${yearMonth}-31`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
     // Get snapshots for the month
     const { data: snapshots, error } = await supabase
