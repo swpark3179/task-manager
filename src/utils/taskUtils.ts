@@ -83,11 +83,20 @@ export function getCompletionPercentage(task: Task): number {
     return task.status === 'completed' ? 100 : 0;
   }
 
-  const activeChildren = task.children!.filter(c => c.status !== 'discarded');
-  if (activeChildren.length === 0) return 100;
+  let activeCount = 0;
+  let completedCount = 0;
 
-  const completedCount = activeChildren.filter(c => c.status === 'completed').length;
-  return Math.round((completedCount / activeChildren.length) * 100);
+  for (const child of task.children!) {
+    if (child.status !== 'discarded') {
+      activeCount++;
+      if (child.status === 'completed') {
+        completedCount++;
+      }
+    }
+  }
+
+  if (activeCount === 0) return 100;
+  return Math.round((completedCount / activeCount) * 100);
 }
 
 export function buildTaskTree(tasks: Task[]): Task[] {
