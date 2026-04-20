@@ -14,18 +14,25 @@ interface TaskListProps {
   onUncomplete?: (id: string) => void;
   onDiscard: (id: string) => void;
   onDelete: (id: string) => void;
-  onUpdate: (id: string, title: string) => void;
+  onUpdateSettings: (id: string, updates: { title?: string; category_id?: string | null; low_priority?: boolean }) => void;
   onAddChild: (parentId: string, title: string) => void;
   onSaveDescription: (taskId: string, description: string) => void;
 }
 
 export default function TaskList({
   tasks, loading, onAddTask, onComplete, onUncomplete, onDiscard,
-  onDelete, onUpdate, onAddChild, onSaveDescription
+  onDelete, onUpdateSettings, onAddChild, onSaveDescription
 }: TaskListProps) {
   const [viewMode, setViewMode] = useState<'tree' | 'leaf'>('tree');
   const summary = calculateStatusSummary(tasks);
+
   const displayTasks = viewMode === 'tree' ? tasks : getLeafTasks(tasks);
+
+  const normalTasks = displayTasks.filter(t => !t.low_priority);
+  const lowPriorityTasks = displayTasks.filter(t => t.low_priority);
+
+  const [showLowPriority, setShowLowPriority] = useState(false);
+
 
   return (
     <div className="task-list">
@@ -110,19 +117,57 @@ export default function TaskList({
 
       {/* Task tree */}
       {tasks.length > 0 && (
-        <TaskTree
-          tasks={displayTasks}
+        <>
+          <TaskTree
+            tasks={normalTasks}
+            onComplete={onComplete}
+            onUncomplete={onUncomplete}
+            onDiscard={onDiscard}
+            onDelete={onDelete}
+            onUpdateSettings={onUpdateSettings}
+            onAddChild={onAddChild}
+            onSaveDescription={onSaveDescription}
+            showAddInput={false}
+          />
 
-          onComplete={onComplete}
-          onUncomplete={onUncomplete}
-          onDiscard={onDiscard}
-          onDelete={onDelete}
-          onUpdate={onUpdate}
-          onAddChild={onAddChild}
+          {lowPriorityTasks.length > 0 && (
+            <div className="low-priority-section" style={{ marginTop: '16px' }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowLowPriority(!showLowPriority)}
+                style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: '4px' }}
+              >
+                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                  낮은 우선순위 할일 ({lowPriorityTasks.length})
+                </span>
+                <svg
+                  width="14" height="14"
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ transform: showLowPriority ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', color: 'var(--text-muted)' }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
 
-          onSaveDescription={onSaveDescription}
-          showAddInput={false}
-        />
+              {showLowPriority && (
+                <div style={{ marginTop: '8px' }}>
+                  <TaskTree
+                    tasks={lowPriorityTasks}
+                    onComplete={onComplete}
+                    onUncomplete={onUncomplete}
+                    onDiscard={onDiscard}
+                    onDelete={onDelete}
+                    onUpdateSettings={onUpdateSettings}
+                    onAddChild={onAddChild}
+                    onSaveDescription={onSaveDescription}
+                    showAddInput={false}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -73,7 +73,7 @@ export default function HistoryPage() {
           onUncomplete={async (id) => { await uncompleteTask(id); await loadTasks(); }}
           onDiscard={async (id) => { await discardTask(id); await loadTasks(); }}
           onDelete={async (id) => { if (confirm('삭제하시겠습니까?')) { await deleteTask(id); await loadTasks(); } }}
-          onUpdate={async (id, title) => { await updateTask(id, { title }); await loadTasks(); }}
+          onUpdateSettings={async (id, updates) => { await updateTask(id, updates); await loadTasks(); }}
           onAddChild={async (parentId, title) => { await createTask({ title, parent_id: parentId, created_date: viewDate }); await loadTasks(); }}
           onSaveDescription={async (taskId, description) => { await updateTask(taskId, { description }); await loadTasks(); }}
         />

@@ -102,14 +102,16 @@ export default function TodayPage() {
     }
   };
 
-  const handleUpdate = async (id: string, title: string) => {
+
+  const handleUpdateSettings = async (id: string, updates: { title?: string; category_id?: string | null; low_priority?: boolean }) => {
     try {
-      await updateTask(id, { title });
+      await updateTask(id, updates);
       await loadTasks();
     } catch (err) {
-      console.error('Failed to update task:', err);
+      console.error('Failed to update task settings:', err);
     }
   };
+
 
   const handleAddChild = async (parentId: string, title: string) => {
     try {
@@ -156,7 +158,7 @@ export default function TodayPage() {
           onUncomplete={handleUncomplete}
           onDiscard={handleDiscard}
           onDelete={handleDelete}
-          onUpdate={handleUpdate}
+          onUpdateSettings={handleUpdateSettings}
           onAddChild={handleAddChild}
           onSaveDescription={handleSaveDescription}
         />
