@@ -2,7 +2,7 @@ import type { Task } from '../../types';
 import TaskTree from './TaskTree';
 import TaskInput from './TaskInput';
 import { calculateStatusSummary, getLeafTasks } from '../../utils/taskUtils';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import './Tasks.css';
 
 interface TaskListProps {
@@ -24,12 +24,12 @@ export default function TaskList({
   onDelete, onUpdateSettings, onAddChild, onSaveDescription
 }: TaskListProps) {
   const [viewMode, setViewMode] = useState<'tree' | 'leaf'>('tree');
-  const summary = calculateStatusSummary(tasks);
+  const summary = useMemo(() => calculateStatusSummary(tasks), [tasks]);
 
-  const displayTasks = viewMode === 'tree' ? tasks : getLeafTasks(tasks);
+  const displayTasks = useMemo(() => viewMode === 'tree' ? tasks : getLeafTasks(tasks), [viewMode, tasks]);
 
-  const normalTasks = displayTasks.filter(t => !t.low_priority);
-  const lowPriorityTasks = displayTasks.filter(t => t.low_priority);
+  const normalTasks = useMemo(() => displayTasks.filter(t => !t.low_priority), [displayTasks]);
+  const lowPriorityTasks = useMemo(() => displayTasks.filter(t => t.low_priority), [displayTasks]);
 
   const [showLowPriority, setShowLowPriority] = useState(false);
 
