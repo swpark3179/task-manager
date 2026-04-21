@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSwipe } from '../hooks/useSwipe';
 import {
   fetchCalendarData,
   fetchCategories,
@@ -78,6 +79,11 @@ export default function CalendarPage() {
     } else setMonth((m) => m + 1);
   };
 
+  const swipeHandlers = useSwipe({
+    onSwipedLeft: nextMonth,
+    onSwipedRight: prevMonth
+  });
+
   const goToToday = () => {
     const now = new Date();
     setYear(now.getFullYear());
@@ -100,7 +106,7 @@ export default function CalendarPage() {
   };
 
   return (
-    <div className="page calendar-page">
+    <div className="page calendar-page" {...swipeHandlers}>
       <div className="page-header">
         <div>
           <h1 className="page-title">달력</h1>

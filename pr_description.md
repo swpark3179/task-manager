@@ -1,8 +1,7 @@
-🎯 What:
-iOS 배포 시 발생하는 AppIcon 투명도(Alpha Channel) 오류를 해결합니다.
+모바일 환경에서 오늘의 할일, 히스토리, 달력 페이지에 있는 좌우 이동 화살표를 제거하고, 화면을 좌우로 스와이프하여 날짜와 달을 이동할 수 있도록 기능을 추가했습니다.
 
-🛠 How:
-Github Action release workflow(`.github/workflows/release.yml`)의 `build-ios` 작업에서 `tauri icon`으로 아이콘을 생성한 직후, `imagemagick`의 `mogrify` 명령어를 사용하여 모든 iOS 아이콘에서 Alpha Channel을 제거하는 단계를 추가했습니다.
-
-✨ Result:
-이제 App Store Connect 업로드 시 투명도(Alpha Channel) 관련 에러(`Invalid large app icon. The large app icon in the asset catalog in “Task Manager.app” can’t be transparent or contain an alpha channel.`)가 발생하지 않으며, iOS 앱 배포가 정상적으로 이루어집니다.
+🎯 변경 사항:
+- `useSwipe` 커스텀 훅 추가 (`src/hooks/useSwipe.ts`)
+- `TodayPage`, `HistoryPage`, `CalendarPage`에 스와이프 제스처 이벤트 추가
+- 스와이프에 따라 각각 전/후 날짜, 전/후 달로 이동하도록 처리
+- 화면 너비가 767px 이하인 경우 화살표 버튼(`.date-navigator-btn`)을 숨기도록 `Pages.css` 수정
