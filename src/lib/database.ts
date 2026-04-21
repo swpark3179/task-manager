@@ -6,7 +6,8 @@ import { buildTaskTree } from '../utils/taskUtils';
 import { getTodayString } from '../utils/dateUtils';
 import type {
   Task, Category, CalendarCellData,
-  CreateTaskInput, UpdateTaskInput, TaskStatusSummary
+  CreateTaskInput, UpdateTaskInput, TaskStatusSummary,
+  Schedule, CreateScheduleInput, UpdateScheduleInput
 } from '../types';
 
 // =============================================
@@ -421,6 +422,17 @@ async function fetchCalendarFromRemote(year: number, month: number): Promise<Cal
 
   if (tasksError) throw tasksError;
 
+  // Get schedules for this month
+  const { data: schedules, error: schedulesError } = await supabase
+    .from('schedules')
+    .select('*')
+    .eq('user_id', userId)
+    .lte('start_date', endDate)
+    .gte('end_date', startDate);
+
+  if (schedulesError) throw schedulesError;
+
+
   // Build calendar data
   const dateMap = new Map<string, CalendarCellData>();
 
@@ -429,6 +441,7 @@ async function fetchCalendarFromRemote(year: number, month: number): Promise<Cal
       dateMap.set(snap.snapshot_date, {
         date: snap.snapshot_date,
         tasks: [],
+        schedules: [],
         summary: { total: 0, completed: 0, inProgress: 0, pending: 0, discarded: 0 },
       });
     }
@@ -447,6 +460,7 @@ async function fetchCalendarFromRemote(year: number, month: number): Promise<Cal
       dateMap.set(date, {
         date,
         tasks: [],
+        schedules: [],
         summary: { total: 0, completed: 0, inProgress: 0, pending: 0, discarded: 0 },
       });
     }
@@ -464,6 +478,36 @@ async function fetchCalendarFromRemote(year: number, month: number): Promise<Cal
         category_id: task.category_id,
         parent_id: task.parent_id,
       });
+    }
+  }
+
+
+  for (const schedule of (schedules || [])) {
+    // Determine the range of dates this schedule spans within the current month
+    const sDate = new Date(schedule.start_date);
+    const eDate = new Date(schedule.end_date);
+    const mStart = new Date(startDate);
+    const mEnd = new Date(endDate);
+
+    let current = sDate < mStart ? mStart : sDate;
+    const end = eDate > mEnd ? mEnd : eDate;
+
+    while (current <= end) {
+      const dateStr = current.toISOString().split('T')[0];
+      if (!dateMap.has(dateStr)) {
+        dateMap.set(dateStr, {
+          date: dateStr,
+          tasks: [],
+          schedules: [],
+          summary: { total: 0, completed: 0, inProgress: 0, pending: 0, discarded: 0 },
+        });
+      }
+      const cell = dateMap.get(dateStr);
+      // ensure schedules array exists, may not if not initialized properly
+      if (cell && !cell.schedules) cell.schedules = [];
+      if (cell) cell.schedules.push(schedule);
+
+      current.setDate(current.getDate() + 1);
     }
   }
 
@@ -544,6 +588,73 @@ export async function forceSync(): Promise<void> {
   return withSyncStatus(async () => {
     await clearAllCaches();
   });
+}
+
+// =============================================
+
+// =============================================
+// Schedules
+// =============================================
+
+export async function createSchedule(input: CreateScheduleInput): Promise<Schedule> {
+  return withSyncStatus(async () => {
+    const userId = await getCurrentUserId();
+    const { data, error } = await supabase
+      .from('schedules')
+      .insert([{
+        user_id: userId,
+        ...input,
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    await clearAllCaches();
+    return data;
+  });
+}
+
+export async function updateSchedule(id: string, input: UpdateScheduleInput): Promise<Schedule> {
+  return withSyncStatus(async () => {
+    const { data, error } = await supabase
+      .from('schedules')
+      .update(input)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    await clearAllCaches();
+    return data;
+  });
+}
+
+export async function deleteSchedule(id: string): Promise<void> {
+  return withSyncStatus(async () => {
+    const { error } = await supabase
+      .from('schedules')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    await clearAllCaches();
+  });
+}
+
+export async function fetchSchedulesForDateRange(startDate: string, endDate: string): Promise<Schedule[]> {
+    return withSyncStatus(async () => {
+        const userId = await getCurrentUserId();
+        const { data, error } = await supabase
+            .from('schedules')
+            .select('*')
+            .eq('user_id', userId)
+            .lte('start_date', endDate)
+            .gte('end_date', startDate)
+            .order('start_date', { ascending: true });
+
+        if (error) throw error;
+        return data || [];
+    });
 }
 
 // =============================================

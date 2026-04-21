@@ -13,6 +13,19 @@ export interface Category {
   updated_at: string;
 }
 
+
+export interface Schedule {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  start_date: string;
+  end_date: string;
+  estimated_time: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Task {
   id: string;
   user_id: string;
@@ -70,6 +83,7 @@ export interface TaskStatusSummary {
 export interface CalendarCellData {
   date: string;
   tasks: DailyTaskSnapshot[];
+  schedules: Schedule[];
   summary: TaskStatusSummary;
 }
 
@@ -95,4 +109,20 @@ export interface UpdateTaskInput {
   discarded_at?: string | null;
   sort_order?: number;
   created_date?: string;
+}
+
+export interface CreateScheduleInput {
+  title: string;
+  description?: string | null;
+  start_date: string;
+  end_date: string;
+  estimated_time?: string | null;
+}
+
+export interface UpdateScheduleInput {
+  title?: string;
+  description?: string | null;
+  start_date?: string;
+  end_date?: string;
+  estimated_time?: string | null;
 }
