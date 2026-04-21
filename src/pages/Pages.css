@@ -382,3 +382,7 @@
     display: none;
   }
 }
+.calendar-cell.selected {
+  background-color: var(--accent-light);
+  border: 1px solid var(--accent-primary);
+}

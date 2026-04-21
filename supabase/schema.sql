@@ -115,3 +115,26 @@ CREATE TRIGGER tasks_updated_at
 CREATE TRIGGER progress_logs_updated_at
   BEFORE UPDATE ON progress_logs
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- Create Schedules table
+CREATE TABLE schedules (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL, -- references auth.users(id)
+  title TEXT NOT NULL,
+  description TEXT,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  estimated_time TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
+ALTER TABLE schedules ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own schedules" ON schedules
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE TRIGGER update_schedules_updated_at
+    BEFORE UPDATE ON schedules
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();

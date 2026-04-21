@@ -17,6 +17,7 @@ import type { CalendarCellData, Category } from "../types";
 import { buildTaskTree } from "../utils/taskUtils";
 import TaskInput from "../components/tasks/TaskInput";
 import TaskTree from "../components/tasks/TaskTree";
+import ScheduleModal from "../components/schedules/ScheduleModal";
 import type { Task } from "../types";
 
 import "./Pages.css";
@@ -31,6 +32,12 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [viewMode, setViewMode] = useState<"tree" | "leaf">("tree");
+
+  // Drag selection state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState<string | null>(null);
+  const [dragEnd, setDragEnd] = useState<string | null>(null);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
 
 
   useEffect(() => {
@@ -97,6 +104,35 @@ export default function CalendarPage() {
     return calendarData.find((c) => c.date === dateStr);
   };
 
+  const handleMouseDown = (dateStr: string, e: React.MouseEvent) => {
+    // Only handle left click
+    if (e.button !== 0) return;
+    setIsDragging(true);
+    setDragStart(dateStr);
+    setDragEnd(dateStr);
+  };
+
+  const handleMouseEnter = (dateStr: string) => {
+    if (isDragging) {
+      setDragEnd(dateStr);
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (isDragging) {
+      setIsDragging(false);
+      if (dragStart && dragEnd) {
+        if (dragStart === dragEnd) {
+          // It's a click, trigger normal cell click
+          handleCellClick(dragStart);
+        } else {
+          // It's a drag, open schedule modal
+          setShowScheduleModal(true);
+        }
+      }
+    }
+  };
+
   const handleCellClick = (dateStr: string) => {
     setSelectedDate(dateStr);
   };
@@ -151,7 +187,7 @@ export default function CalendarPage() {
           </button>
         </div>
 
-        <div className="calendar-grid">
+        <div className="calendar-grid" onMouseUp={handleMouseUp} onMouseLeave={() => { if (isDragging) handleMouseUp(); }}>
           {/* Day headers */}
           {dayLabels.map((day) => (
             <div
@@ -178,12 +214,22 @@ export default function CalendarPage() {
             return (
               <div
                 key={dateStr}
-                className={`calendar-cell ${isToday ? "today" : ""} ${cellData ? "has-data" : ""} ${isSunday ? "sunday" : ""} ${isSaturday ? "saturday" : ""}`}
-                onClick={() => handleCellClick(dateStr)}
+                className={`calendar-cell ${isToday ? "today" : ""} ${cellData ? "has-data" : ""} ${isSunday ? "sunday" : ""} ${isSaturday ? "saturday" : ""} ${isDragging && dragStart && dragEnd && ((dragStart <= dragEnd && dateStr >= dragStart && dateStr <= dragEnd) || (dragStart > dragEnd && dateStr <= dragStart && dateStr >= dragEnd)) ? "selected" : ""}`}
+                onMouseDown={(e) => handleMouseDown(dateStr, e)}
+                onMouseEnter={() => handleMouseEnter(dateStr)}
               >
                 <span className="calendar-cell-date">{date.getDate()}</span>
-                {cellData && cellData.tasks && cellData.tasks.length > 0 && (
+                {cellData && ((cellData.tasks && cellData.tasks.length > 0) || (cellData.schedules && cellData.schedules.length > 0)) && (
                   <div className="calendar-cell-tasks">
+                    {cellData.schedules && cellData.schedules.map(schedule => (
+                      <div
+                        key={schedule.id}
+                        className="calendar-task-item schedule-item"
+                        style={{ backgroundColor: 'var(--accent-primary)', color: 'white', borderRadius: '4px', padding: '2px 4px', fontSize: '10px' }}
+                      >
+                        <span className="calendar-task-title">{schedule.title}</span>
+                      </div>
+                    ))}
                     {cellData.tasks.filter(t => !t.is_snapshot).slice(0, 3).map((task) => {
                       const catColor = getCategoryColor(task.category_id);
                       return (
@@ -218,6 +264,25 @@ export default function CalendarPage() {
           })}
         </div>
 
+
+        {showScheduleModal && dragStart && dragEnd && (
+          <ScheduleModal
+            startDate={dragStart <= dragEnd ? dragStart : dragEnd}
+            endDate={dragStart <= dragEnd ? dragEnd : dragStart}
+            onClose={() => {
+              setShowScheduleModal(false);
+              setDragStart(null);
+              setDragEnd(null);
+            }}
+            onSave={async () => {
+              const freshData = await fetchCalendarData(year, month);
+              setCalendarData(freshData);
+              setShowScheduleModal(false);
+              setDragStart(null);
+              setDragEnd(null);
+            }}
+          />
+        )}
         {loading && (
           <div className="loading-container">
             <div className="loading-spinner" />

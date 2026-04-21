@@ -1,0 +1,113 @@
+import { useState } from 'react';
+import MDEditor from '@uiw/react-md-editor';
+import { createSchedule } from '../../lib/database';
+
+interface ScheduleModalProps {
+  startDate: string;
+  endDate: string;
+  onClose: () => void;
+  onSave: () => void;
+}
+
+export default function ScheduleModal({ startDate, endDate, onClose, onSave }: ScheduleModalProps) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [estimatedTime, setEstimatedTime] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isSameDay = startDate === endDate;
+
+  const handleSave = async () => {
+    if (!title.trim()) {
+      setError('일정 제목을 입력해주세요.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      await createSchedule({
+        title: title.trim(),
+        description: description || null,
+        start_date: startDate,
+        end_date: endDate,
+        estimated_time: isSameDay && estimatedTime.trim() ? estimatedTime.trim() : null,
+      });
+      onSave();
+    } catch (err: any) {
+      setError(err.message || '일정 저장에 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1000 }}>
+      <div
+        className="modal-content"
+        onClick={(e) => e.stopPropagation()}
+        style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '600px', width: '90%' }}
+      >
+        <h2 style={{ margin: 0 }}>일정 등록</h2>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ flex: 1 }}>
+            <label className="form-label">시작일</label>
+            <input type="date" className="form-input" value={startDate} disabled />
+          </div>
+          <span>~</span>
+          <div style={{ flex: 1 }}>
+            <label className="form-label">종료일</label>
+            <input type="date" className="form-input" value={endDate} disabled />
+          </div>
+        </div>
+
+        {isSameDay && (
+          <div>
+            <label className="form-label">예정 시간 (선택)</label>
+            <input
+              type="text"
+              className="form-input"
+              value={estimatedTime}
+              onChange={e => setEstimatedTime(e.target.value)}
+              placeholder="예: 14:00 또는 2시간"
+            />
+          </div>
+        )}
+
+        <div>
+          <label className="form-label">제목 *</label>
+          <input
+            type="text"
+            className="form-input"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="일정 제목을 입력하세요"
+            autoFocus
+          />
+        </div>
+
+        <div data-color-mode="light" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <label className="form-label">상세 내용 (마크다운)</label>
+          <MDEditor
+            value={description}
+            onChange={val => setDescription(val || '')}
+            height={200}
+            preview="edit"
+          />
+        </div>
+
+        {error && <div style={{ color: 'var(--nord11)', fontSize: '0.875rem' }}>{error}</div>}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>취소</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={loading}>
+            {loading ? '저장 중...' : '저장'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
