@@ -265,6 +265,27 @@ export async function completeTask(id: string): Promise<void> {
   });
 }
 
+export async function undiscardTask(id: string): Promise<void> {
+  // Optimistic update
+  await updateTaskInAllCaches(id, {
+    status: 'pending',
+    discarded_at: null
+  });
+  await calendarCache.invalidate();
+
+  runBackgroundSync(async () => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({
+        status: 'pending',
+        discarded_at: null,
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+  });
+}
+
 export async function discardTask(id: string): Promise<void> {
   const now = new Date().toISOString();
   // Optimistic update
