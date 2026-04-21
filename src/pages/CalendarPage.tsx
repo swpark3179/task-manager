@@ -175,7 +175,7 @@ export default function CalendarPage() {
                 <span className="calendar-cell-date">{date.getDate()}</span>
                 {cellData && cellData.tasks && cellData.tasks.length > 0 && (
                   <div className="calendar-cell-tasks">
-                    {cellData.tasks.slice(0, 3).map((task) => {
+                    {cellData.tasks.filter(t => !t.is_snapshot).slice(0, 3).map((task) => {
                       const catColor = getCategoryColor(task.category_id);
                       return (
                         <div
@@ -197,9 +197,9 @@ export default function CalendarPage() {
                         </div>
                       );
                     })}
-                    {cellData.tasks.length > 3 && (
+                    {cellData.tasks.filter(t => !t.is_snapshot).length > 3 && (
                       <div className="calendar-task-more">
-                        +{cellData.tasks.length - 3}
+                        +{cellData.tasks.filter(t => !t.is_snapshot).length - 3}
                       </div>
                     )}
                   </div>
@@ -312,7 +312,7 @@ export default function CalendarPage() {
                 style={{ overflowY: "auto", flex: 1 }}
               >
                 {(() => {
-                  const allTasks = getCellData(selectedDate)?.tasks || [];
+                  const allTasks = (getCellData(selectedDate)?.tasks || []).filter(t => !t.is_snapshot);
 
                   let displayTasks = allTasks;
                   if (viewMode === "tree") {
@@ -377,7 +377,7 @@ export default function CalendarPage() {
                   paddingTop: "16px",
                 }}
               >
-                <TaskInput
+                {selectedDate === today && <TaskInput
                   onAdd={async (title) => {
                     try {
                       await createTask({ title, created_date: selectedDate });
@@ -387,7 +387,7 @@ export default function CalendarPage() {
                       console.error("Failed to create task", e);
                     }
                   }}
-                />
+                />}
               </div>
             </div>
           </div>
