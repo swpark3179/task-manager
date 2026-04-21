@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSwipe } from '../hooks/useSwipe';
 import {
@@ -39,6 +39,13 @@ export default function CalendarPage() {
   const [dragEnd, setDragEnd] = useState<string | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
+  // Touch and Long Press state
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPressTriggeredRef = useRef(false);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const calendarGridRef = useRef<HTMLDivElement>(null);
+
+
 
   useEffect(() => {
     fetchCategories().then(setCategories).catch(console.error);
@@ -71,8 +78,23 @@ export default function CalendarPage() {
       cancelled = true;
     };
   }, [year, month]);
+  // Lock body scroll and swipe when dragging in mobile
+  useEffect(() => {
+    if (isDragging && isLongPressTriggeredRef.current) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    };
+  }, [isDragging]);
 
   const grid = getMonthCalendarGrid(year, month);
+
   const dayLabels = ["일", "월", "화", "수", "목", "금", "토"];
 
   const prevMonth = () => {
@@ -132,8 +154,111 @@ export default function CalendarPage() {
       }
     }
   };
+  const handleTouchStart = (dateStr: string, e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+
+    // Check if touch is on a task item, if so we don't want to start dragging the cell
+    const target = e.target as HTMLElement;
+    if (target.closest('.calendar-task-item') || target.closest('.calendar-task-more')) {
+      return;
+    }
+
+    const touch = e.touches[0];
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+    isLongPressTriggeredRef.current = false;
+
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressTriggeredRef.current = true;
+      setIsDragging(true);
+      setDragStart(dateStr);
+      setDragEnd(dateStr);
+      // Haptic feedback if available
+      if (window.navigator && window.navigator.vibrate) {
+        window.navigator.vibrate(50);
+      }
+    }, 500); // 500ms for long press
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPosRef.current) return;
+
+    const touch = e.touches[0];
+    const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
+    const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
+
+    // If moved significantly before long press triggers, cancel long press
+    if (!isLongPressTriggeredRef.current && (dx > 10 || dy > 10)) {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (isLongPressTriggeredRef.current && isDragging) {
+      // Prevent scrolling while dragging
+      e.preventDefault();
+
+      // Find which cell we are currently hovering over
+      if (calendarGridRef.current) {
+        const cells = calendarGridRef.current.querySelectorAll('.calendar-cell[data-date]');
+        for (const cell of Array.from(cells)) {
+          const rect = cell.getBoundingClientRect();
+          if (
+            touch.clientX >= rect.left &&
+            touch.clientX <= rect.right &&
+            touch.clientY >= rect.top &&
+            touch.clientY <= rect.bottom
+          ) {
+            const dateStr = cell.getAttribute('data-date');
+            if (dateStr) {
+              setDragEnd(dateStr);
+            }
+            break;
+          }
+        }
+      }
+    }
+  };
+
+  const handleTouchEnd = (_dateStr: string, e: React.TouchEvent) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+
+    touchStartPosRef.current = null;
+
+    if (isLongPressTriggeredRef.current) {
+      // It was a long press drag
+      isLongPressTriggeredRef.current = false;
+      setIsDragging(false);
+
+      if (dragStart && dragEnd && dragStart !== dragEnd) {
+        setShowScheduleModal(true);
+      } else if (dragStart === dragEnd) {
+        // Just long pressed on a single cell, maybe open schedule modal too
+        setShowScheduleModal(true);
+      }
+
+      // Prevent the click event that might follow
+      if (e.cancelable) e.preventDefault();
+    } else {
+      // It was a short tap, handle as click if it wasn't a swipe
+      // The swipe hook will handle the swipe
+      // For click, we might want to check if it moved much to distinguish from a failed swipe
+      // We rely on handleCellClick being called by a normal onClick or onTouchEnd logic if needed
+      // Actually handleCellClick handles this nicely in standard onClick so let's not interfere,
+      // But we prevent default here if we handled it as a long press above.
+    }
+  };
 
   const handleCellClick = (dateStr: string) => {
+
     setSelectedDate(dateStr);
   };
   const handleNavigate = (dateStr: string) => {
@@ -187,7 +312,7 @@ export default function CalendarPage() {
           </button>
         </div>
 
-        <div className="calendar-grid" onMouseUp={handleMouseUp} onMouseLeave={() => { if (isDragging) handleMouseUp(); }}>
+        <div ref={calendarGridRef} className="calendar-grid" onMouseUp={handleMouseUp} onMouseLeave={() => { if (isDragging) handleMouseUp(); }} onTouchMove={handleTouchMove}>
           {/* Day headers */}
           {dayLabels.map((day) => (
             <div
@@ -214,9 +339,13 @@ export default function CalendarPage() {
             return (
               <div
                 key={dateStr}
+                data-date={dateStr}
                 className={`calendar-cell ${isToday ? "today" : ""} ${cellData ? "has-data" : ""} ${isSunday ? "sunday" : ""} ${isSaturday ? "saturday" : ""} ${isDragging && dragStart && dragEnd && ((dragStart <= dragEnd && dateStr >= dragStart && dateStr <= dragEnd) || (dragStart > dragEnd && dateStr <= dragStart && dateStr >= dragEnd)) ? "selected" : ""}`}
                 onMouseDown={(e) => handleMouseDown(dateStr, e)}
                 onMouseEnter={() => handleMouseEnter(dateStr)}
+                onTouchStart={(e) => handleTouchStart(dateStr, e)}
+                onTouchEnd={(e) => handleTouchEnd(dateStr, e)}
+                onClick={() => handleCellClick(dateStr)}
               >
                 <span className="calendar-cell-date">{date.getDate()}</span>
                 {cellData && ((cellData.tasks && cellData.tasks.length > 0) || (cellData.schedules && cellData.schedules.length > 0)) && (
