@@ -6,7 +6,7 @@ import { useSwipe } from '../hooks/useSwipe';
 
 import {
   fetchTasksByDate, createTask, updateTask, deleteTask,
-  completeTask, uncompleteTask, discardTask, rolloverTasks
+  completeTask, uncompleteTask, discardTask, undiscardTask, rolloverTasks
 } from '../lib/database';
 import { getTodayString, formatDateDisplay, getPrevDay, getNextDay } from '../utils/dateUtils';
 import type { Task } from '../types';
@@ -89,6 +89,15 @@ export default function TodayPage() {
     }
   };
 
+  const handleUndiscard = async (id: string) => {
+    try {
+      await undiscardTask(id);
+      await loadTasks();
+    } catch (err) {
+      console.error('Failed to undiscard task:', err);
+    }
+  };
+
   const handleDiscard = async (id: string) => {
     try {
       await discardTask(id);
@@ -163,6 +172,7 @@ export default function TodayPage() {
           onComplete={handleComplete}
           onUncomplete={handleUncomplete}
           onDiscard={handleDiscard}
+          onUndiscard={handleUndiscard}
           onDelete={handleDelete}
           onUpdateSettings={handleUpdateSettings}
           onAddChild={handleAddChild}

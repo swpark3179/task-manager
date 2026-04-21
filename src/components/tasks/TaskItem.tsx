@@ -14,6 +14,7 @@ interface TaskItemProps {
   onComplete: (id: string) => void;
   onUncomplete?: (id: string) => void;
   onDiscard: (id: string) => void;
+  onUndiscard?: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdateSettings: (id: string, updates: { title?: string; category_id?: string | null; low_priority?: boolean }) => void;
   onAddChild: (parentId: string, title: string) => void;
@@ -21,7 +22,7 @@ interface TaskItemProps {
 }
 
 export default function TaskItem({
-  task, depth = 0, onComplete, onUncomplete, onDiscard, onDelete,
+  task, depth = 0, onComplete, onUncomplete, onDiscard, onUndiscard, onDelete,
   onUpdateSettings, onAddChild, onSaveDescription
 }: TaskItemProps) {
   const [expanded, setExpanded] = useState(false);
@@ -44,6 +45,7 @@ export default function TaskItem({
           onComplete={task.is_snapshot ? () => {} : () => onComplete(task.id)}
           onUncomplete={task.is_snapshot ? undefined : (onUncomplete ? () => onUncomplete(task.id) : undefined)}
           onDiscard={task.is_snapshot ? () => {} : () => onDiscard(task.id)}
+          onUndiscard={task.is_snapshot ? undefined : (onUndiscard ? () => onUndiscard(task.id) : undefined)}
         />
 
         <div className="task-item-content">
@@ -87,7 +89,7 @@ export default function TaskItem({
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </button>}
-          {!isCompleted && !isDiscarded && (
+          {!task.is_snapshot && (
             <button
               className="btn btn-ghost btn-icon btn-sm task-item-delete"
               onClick={() => onDelete(task.id)}
@@ -116,6 +118,7 @@ export default function TaskItem({
                 onComplete={onComplete}
                 onUncomplete={onUncomplete}
                 onDiscard={onDiscard}
+                onUndiscard={onUndiscard}
                 onDelete={onDelete}
                 onUpdateSettings={onUpdateSettings}
                 onAddChild={onAddChild}

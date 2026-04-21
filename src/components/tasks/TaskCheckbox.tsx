@@ -8,9 +8,10 @@ interface TaskCheckboxProps {
   onComplete: () => void;
   onDiscard: () => void;
   onUncomplete?: () => void;
+  onUndiscard?: () => void;
 }
 
-export default function TaskCheckbox({ status, disabled, onComplete, onDiscard, onUncomplete }: TaskCheckboxProps) {
+export default function TaskCheckbox({ status, disabled, onComplete, onDiscard, onUncomplete, onUndiscard }: TaskCheckboxProps) {
   const [longPressTimer, setLongPressTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const handleClick = (e: MouseEvent) => {
@@ -30,14 +31,18 @@ export default function TaskCheckbox({ status, disabled, onComplete, onDiscard, 
     onDiscard();
   };
 
-  // Mobile long press
-  const handleTouchStart = useCallback((_e: TouchEvent) => {
-    if (disabled || status === 'completed' || status === 'discarded') return;
+  // Mobile & Desktop long press
+  const handleTouchStart = useCallback((_e: TouchEvent | MouseEvent) => {
+    if (disabled || status === 'completed') return;
     const timer = setTimeout(() => {
-      onDiscard();
+      if (status === 'discarded') {
+        if (onUndiscard) onUndiscard();
+      } else {
+        onDiscard();
+      }
     }, 600);
     setLongPressTimer(timer);
-  }, [disabled, status, onDiscard]);
+  }, [disabled, status, onDiscard, onUndiscard]);
 
   const handleTouchEnd = useCallback(() => {
     if (longPressTimer) {
@@ -54,6 +59,9 @@ export default function TaskCheckbox({ status, disabled, onComplete, onDiscard, 
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
+      onMouseDown={handleTouchStart}
+      onMouseUp={handleTouchEnd}
+      onMouseLeave={handleTouchEnd}
       disabled={disabled}
       title={disabled ? '하위 작업에 의해 자동 계산됩니다' : getTooltip(status)}
       type="button"

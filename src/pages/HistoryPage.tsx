@@ -4,7 +4,7 @@ import { useSwipe } from '../hooks/useSwipe';
 import TaskList from '../components/tasks/TaskList';
 import {
   fetchTasksByDate, updateTask, deleteTask,
-  completeTask, uncompleteTask, discardTask, createTask
+  completeTask, uncompleteTask, discardTask, undiscardTask, createTask
 } from '../lib/database';
 import { formatDateFull, getNextDay, getPrevDay, getTodayString } from '../utils/dateUtils';
 import type { Task } from '../types';
@@ -77,6 +77,7 @@ export default function HistoryPage() {
           onComplete={async (id) => { await completeTask(id); await loadTasks(); }}
           onUncomplete={async (id) => { await uncompleteTask(id); await loadTasks(); }}
           onDiscard={async (id) => { await discardTask(id); await loadTasks(); }}
+          onUndiscard={async (id) => { await undiscardTask(id); await loadTasks(); }}
           onDelete={async (id) => { if (confirm('삭제하시겠습니까?')) { await deleteTask(id); await loadTasks(); } }}
           onUpdateSettings={async (id, updates) => { await updateTask(id, updates); await loadTasks(); }}
           onAddChild={async (parentId, title) => { await createTask({ title, parent_id: parentId, created_date: viewDate }); await loadTasks(); }}

@@ -13,6 +13,7 @@ interface TaskListProps {
   onComplete: (id: string) => void;
   onUncomplete?: (id: string) => void;
   onDiscard: (id: string) => void;
+  onUndiscard?: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdateSettings: (id: string, updates: { title?: string; category_id?: string | null; low_priority?: boolean }) => void;
   onAddChild: (parentId: string, title: string) => void;
@@ -21,7 +22,7 @@ interface TaskListProps {
 }
 
 export default function TaskList({
-  tasks, loading, onAddTask, onComplete, onUncomplete, onDiscard,
+  tasks, loading, onAddTask, onComplete, onUncomplete, onDiscard, onUndiscard,
   onDelete, onUpdateSettings, onAddChild, onSaveDescription, isHistory
 }: TaskListProps) {
   const [viewMode, setViewMode] = useState<'tree' | 'leaf'>('tree');
@@ -124,6 +125,7 @@ export default function TaskList({
             onComplete={onComplete}
             onUncomplete={onUncomplete}
             onDiscard={onDiscard}
+            onUndiscard={onUndiscard}
             onDelete={onDelete}
             onUpdateSettings={onUpdateSettings}
             onAddChild={onAddChild}
@@ -158,6 +160,7 @@ export default function TaskList({
                     onComplete={onComplete}
                     onUncomplete={onUncomplete}
                     onDiscard={onDiscard}
+                    onUndiscard={onUndiscard}
                     onDelete={onDelete}
                     onUpdateSettings={onUpdateSettings}
                     onAddChild={onAddChild}
