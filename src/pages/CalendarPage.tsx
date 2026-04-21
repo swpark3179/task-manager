@@ -38,6 +38,7 @@ export default function CalendarPage() {
   const [dragStart, setDragStart] = useState<string | null>(null);
   const [dragEnd, setDragEnd] = useState<string | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [selectedSchedule, setSelectedSchedule] = useState<any>(null);
 
   // Touch and Long Press state
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -149,6 +150,7 @@ export default function CalendarPage() {
           handleCellClick(dragStart);
         } else {
           // It's a drag, open schedule modal
+          setSelectedSchedule(null);
           setShowScheduleModal(true);
         }
       }
@@ -239,9 +241,11 @@ export default function CalendarPage() {
       setIsDragging(false);
 
       if (dragStart && dragEnd && dragStart !== dragEnd) {
+        setSelectedSchedule(null);
         setShowScheduleModal(true);
       } else if (dragStart === dragEnd) {
         // Just long pressed on a single cell, maybe open schedule modal too
+        setSelectedSchedule(null);
         setShowScheduleModal(true);
       }
 
@@ -353,6 +357,14 @@ export default function CalendarPage() {
                     {cellData.schedules && cellData.schedules.map(schedule => (
                       <div
                         key={schedule.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedSchedule(schedule);
+                          setDragStart(schedule.start_date);
+                          setDragEnd(schedule.end_date);
+                          setIsDragging(false);
+                          setShowScheduleModal(true);
+                        }}
                         className="calendar-task-item schedule-item"
                         style={{ backgroundColor: 'var(--accent-primary)', color: 'white', borderRadius: '4px', padding: '2px 4px', fontSize: '10px' }}
                       >
@@ -398,10 +410,12 @@ export default function CalendarPage() {
           <ScheduleModal
             startDate={dragStart <= dragEnd ? dragStart : dragEnd}
             endDate={dragStart <= dragEnd ? dragEnd : dragStart}
+            schedule={selectedSchedule}
             onClose={() => {
               setShowScheduleModal(false);
               setDragStart(null);
               setDragEnd(null);
+              setSelectedSchedule(null);
             }}
             onSave={async () => {
               const freshData = await fetchCalendarData(year, month);
@@ -409,6 +423,7 @@ export default function CalendarPage() {
               setShowScheduleModal(false);
               setDragStart(null);
               setDragEnd(null);
+              setSelectedSchedule(null);
             }}
           />
         )}

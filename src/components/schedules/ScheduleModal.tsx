@@ -1,22 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import MDEditor from '@uiw/react-md-editor';
-import { createSchedule } from '../../lib/database';
+import { createSchedule, updateSchedule, deleteSchedule } from '../../lib/database';
+import type { Schedule } from '../../types';
 
 interface ScheduleModalProps {
   startDate: string;
   endDate: string;
+  schedule?: Schedule | null;
   onClose: () => void;
   onSave: () => void;
 }
 
-export default function ScheduleModal({ startDate, endDate, onClose, onSave }: ScheduleModalProps) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [estimatedTime, setEstimatedTime] = useState('');
+export default function ScheduleModal({ startDate: initialStartDate, endDate: initialEndDate, schedule, onClose, onSave }: ScheduleModalProps) {
+  const [startDate, setStartDate] = useState(initialStartDate);
+  const [endDate, setEndDate] = useState(initialEndDate);
+  const [title, setTitle] = useState(schedule?.title || '');
+  const [description, setDescription] = useState(schedule?.description || '');
+  const [estimatedTime, setEstimatedTime] = useState(schedule?.estimated_time || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isSameDay = startDate === endDate;
+
+  useEffect(() => {
+    if (schedule) {
+      setStartDate(schedule.start_date);
+      setEndDate(schedule.end_date);
+      setTitle(schedule.title);
+      setDescription(schedule.description || '');
+      setEstimatedTime(schedule.estimated_time || '');
+    }
+  }, [schedule]);
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -28,17 +42,39 @@ export default function ScheduleModal({ startDate, endDate, onClose, onSave }: S
     setError(null);
 
     try {
-      await createSchedule({
-        title: title.trim(),
-        description: description || null,
-        start_date: startDate,
-        end_date: endDate,
-        estimated_time: isSameDay && estimatedTime.trim() ? estimatedTime.trim() : null,
-      });
+      if (schedule) {
+        await updateSchedule(schedule.id, {
+          title: title.trim(),
+          description: description || null,
+          start_date: startDate,
+          end_date: endDate,
+          estimated_time: isSameDay && estimatedTime.trim() ? estimatedTime.trim() : null,
+        });
+      } else {
+        await createSchedule({
+          title: title.trim(),
+          description: description || null,
+          start_date: startDate,
+          end_date: endDate,
+          estimated_time: isSameDay && estimatedTime.trim() ? estimatedTime.trim() : null,
+        });
+      }
       onSave();
     } catch (err: any) {
       setError(err.message || '일정 저장에 실패했습니다.');
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!schedule || !window.confirm('이 일정을 삭제하시겠습니까?')) return;
+    setLoading(true);
+    try {
+      await deleteSchedule(schedule.id);
+      onSave();
+    } catch (err: any) {
+      setError(err.message || '일정 삭제에 실패했습니다.');
       setLoading(false);
     }
   };
@@ -50,17 +86,23 @@ export default function ScheduleModal({ startDate, endDate, onClose, onSave }: S
         onClick={(e) => e.stopPropagation()}
         style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '600px', width: '90%' }}
       >
-        <h2 style={{ margin: 0 }}>일정 등록</h2>
+        <h2 style={{ margin: 0 }}>{schedule ? '일정 수정' : '일정 등록'}</h2>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <div style={{ flex: 1 }}>
             <label className="form-label">시작일</label>
-            <input type="date" className="form-input" value={startDate} disabled />
+            <input type="date" className="form-input" value={startDate} onChange={e => {
+                setStartDate(e.target.value);
+                if (e.target.value > endDate) setEndDate(e.target.value);
+            }} disabled={!!schedule} />
           </div>
           <span>~</span>
           <div style={{ flex: 1 }}>
             <label className="form-label">종료일</label>
-            <input type="date" className="form-input" value={endDate} disabled />
+            <input type="date" className="form-input" value={endDate} onChange={e => {
+                setEndDate(e.target.value);
+                if (e.target.value < startDate) setStartDate(e.target.value);
+            }} />
           </div>
         </div>
 
@@ -102,6 +144,11 @@ export default function ScheduleModal({ startDate, endDate, onClose, onSave }: S
         {error && <div style={{ color: 'var(--nord11)', fontSize: '0.875rem' }}>{error}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+          {schedule && (
+            <button className="btn btn-ghost" onClick={handleDelete} disabled={loading} style={{ color: 'var(--nord11)', marginRight: 'auto' }}>
+              삭제
+            </button>
+          )}
           <button className="btn btn-ghost" onClick={onClose} disabled={loading}>취소</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={loading}>
             {loading ? '저장 중...' : '저장'}
