@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSwipe } from '../hooks/useSwipe';
 import TaskList from '../components/tasks/TaskList';
 import {
   fetchTasksByDate, updateTask, deleteTask,
@@ -29,6 +30,11 @@ export default function HistoryPage() {
     }
   }, [viewDate]);
 
+  const swipeHandlers = useSwipe({
+    onSwipedLeft: () => goToDate(getNextDay(viewDate)),
+    onSwipedRight: () => goToDate(getPrevDay(viewDate))
+  });
+
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
@@ -42,7 +48,7 @@ export default function HistoryPage() {
   };
 
   return (
-    <div className="page history-page">
+    <div className="page history-page" {...swipeHandlers}>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 className="page-title">히스토리</h1>

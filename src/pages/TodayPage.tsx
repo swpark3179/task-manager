@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import TaskList from '../components/tasks/TaskList';
 import { useNavigate } from 'react-router-dom';
+import { useSwipe } from '../hooks/useSwipe';
 // Auth context available if needed
 
 import {
@@ -12,11 +13,16 @@ import type { Task } from '../types';
 import './Pages.css';
 
 export default function TodayPage() {
-
   const navigate = useNavigate();
+  const today = getTodayString();
+
+  const swipeHandlers = useSwipe({
+    onSwipedLeft: () => navigate(`/history/${getNextDay(today)}`),
+    onSwipedRight: () => navigate(`/history/${getPrevDay(today)}`)
+  });
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
-  const today = getTodayString();
 
   const loadTasks = useCallback(async () => {
     try {
@@ -132,7 +138,7 @@ export default function TodayPage() {
   };
 
   return (
-    <div className="page today-page">
+    <div className="page today-page" {...swipeHandlers}>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 className="page-title">오늘의 할일</h1>

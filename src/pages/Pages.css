@@ -376,3 +376,9 @@
     padding-bottom: 120px;
   }
 }
+
+@media (max-width: 767px) {
+  .date-navigator-btn {
+    display: none;
+  }
+}
