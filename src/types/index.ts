@@ -45,6 +45,7 @@ export interface DailyTaskSnapshot {
   title?: string;
   category_id?: string | null;
   parent_id?: string | null;
+  description?: string | null;
 }
 
 export interface ProxySettings {
