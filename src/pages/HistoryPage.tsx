@@ -69,6 +69,7 @@ export default function HistoryPage() {
 
           loading={loading}
           onAddTask={async (title) => { await createTask({ title, created_date: viewDate }); await loadTasks(); }}
+          isHistory={true}
           onComplete={async (id) => { await completeTask(id); await loadTasks(); }}
           onUncomplete={async (id) => { await uncompleteTask(id); await loadTasks(); }}
           onDiscard={async (id) => { await discardTask(id); await loadTasks(); }}

@@ -30,10 +30,12 @@ export interface Task {
   updated_at: string;
   // Frontend-only (not stored in DB)
   children?: Task[];
+  is_snapshot?: boolean;
 }
 
 
 export interface DailyTaskSnapshot {
+  is_snapshot?: boolean;
   id: string;
   user_id: string;
   task_id: string;

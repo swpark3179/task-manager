@@ -96,7 +96,7 @@ export default function TaskDetail({
                     {isFinished ? '세부 내용 없음' : '세부 내용이 없습니다.'}
                   </p>
                 )}
-                {!isFinished && (
+                {!isFinished && !task.is_snapshot && (
                   <button
                     className="btn btn-ghost btn-sm task-detail-edit-btn absolute-top-right"
                     onClick={(e) => {
@@ -121,7 +121,7 @@ export default function TaskDetail({
         {activeTab === 'children' && (
           <div className="task-detail-section">
             {children}
-            {!isFinished && (
+            {!isFinished && !task.is_snapshot && (
               <TaskInput
                 parentId={task.id}
                 onAdd={(title) => onAddChild(task.id, title)}

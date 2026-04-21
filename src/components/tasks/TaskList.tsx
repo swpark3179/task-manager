@@ -17,11 +17,12 @@ interface TaskListProps {
   onUpdateSettings: (id: string, updates: { title?: string; category_id?: string | null; low_priority?: boolean }) => void;
   onAddChild: (parentId: string, title: string) => void;
   onSaveDescription: (taskId: string, description: string) => void;
+  isHistory?: boolean;
 }
 
 export default function TaskList({
   tasks, loading, onAddTask, onComplete, onUncomplete, onDiscard,
-  onDelete, onUpdateSettings, onAddChild, onSaveDescription
+  onDelete, onUpdateSettings, onAddChild, onSaveDescription, isHistory
 }: TaskListProps) {
   const [viewMode, setViewMode] = useState<'tree' | 'leaf'>('tree');
   const summary = useMemo(() => calculateStatusSummary(tasks), [tasks]);
@@ -88,7 +89,7 @@ export default function TaskList({
       )}
 
       {/* Add task input */}
-      <TaskInput onAdd={onAddTask} />
+      {!isHistory && <TaskInput onAdd={onAddTask} />}
 
       <div style={{ height: 'var(--space-md)' }} />
 

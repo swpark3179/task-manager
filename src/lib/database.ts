@@ -93,7 +93,7 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
           .in('id', missingTaskIds);
 
         if (pastTasks) {
-          tasks = [...tasks, ...pastTasks];
+          tasks = [...tasks, ...pastTasks.map(t => ({ ...t, is_snapshot: true }))];
         }
       }
     }
@@ -138,8 +138,8 @@ async function revalidateTasksByDate(date: string): Promise<void> {
             .in('id', missingTaskIds);
 
           if (pastTasks) {
-            tasks = [...tasks, ...pastTasks];
-          }
+          tasks = [...tasks, ...pastTasks.map(t => ({ ...t, is_snapshot: true }))];
+        }
         }
       }
 
@@ -416,6 +416,7 @@ async function fetchCalendarFromRemote(year: number, month: number): Promise<Cal
       title: (snap as any).tasks?.title || '',
       category_id: (snap as any).tasks?.category_id || null,
       parent_id: (snap as any).tasks?.parent_id || null,
+      is_snapshot: true,
     });
   }
 
