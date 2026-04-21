@@ -41,9 +41,9 @@ export default function TaskItem({
         <TaskCheckbox
           status={task.status}
           disabled={isParent || task.is_snapshot}
-          onComplete={() => onComplete(task.id)}
-          onUncomplete={onUncomplete ? () => onUncomplete(task.id) : undefined}
-          onDiscard={() => onDiscard(task.id)}
+          onComplete={task.is_snapshot ? () => {} : () => onComplete(task.id)}
+          onUncomplete={task.is_snapshot ? undefined : (onUncomplete ? () => onUncomplete(task.id) : undefined)}
+          onDiscard={task.is_snapshot ? () => {} : () => onDiscard(task.id)}
         />
 
         <div className="task-item-content">
