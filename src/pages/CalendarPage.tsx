@@ -14,8 +14,11 @@ import {
   getTodayString,
 } from "../utils/dateUtils";
 import type { CalendarCellData, Category } from "../types";
+import { buildTaskTree } from "../utils/taskUtils";
 import TaskInput from "../components/tasks/TaskInput";
-import TaskSettingsModal from "../components/tasks/modals/TaskSettingsModal";
+import TaskTree from "../components/tasks/TaskTree";
+import type { Task } from "../types";
+
 import "./Pages.css";
 
 export default function CalendarPage() {
@@ -28,7 +31,7 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [viewMode, setViewMode] = useState<"tree" | "leaf">("tree");
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+
 
   useEffect(() => {
     fetchCategories().then(setCategories).catch(console.error);
@@ -263,7 +266,7 @@ export default function CalendarPage() {
                       fontWeight: "normal",
                     }}
                   >
-                    (이동하기)
+                    (go)
                   </span>
                 </h2>
                 <div style={{ display: "flex", gap: "4px" }}>
@@ -320,14 +323,23 @@ export default function CalendarPage() {
                 {(() => {
                   const allTasks = (getCellData(selectedDate)?.tasks || []).filter(t => !t.is_snapshot);
 
-                  let displayTasks = allTasks;
+                  // Remove duplicates based on task_id
+                  const uniqueTasksMap = new Map();
+                  for (const t of allTasks) {
+                    if (!uniqueTasksMap.has(t.task_id)) {
+                      uniqueTasksMap.set(t.task_id, t);
+                    }
+                  }
+                  const uniqueTasks = Array.from(uniqueTasksMap.values());
+
+                  let displayTasks = uniqueTasks;
                   if (viewMode === "tree") {
-                    displayTasks = allTasks.filter((t) => !t.parent_id);
+                    displayTasks = uniqueTasks.filter((t) => !t.parent_id);
                   } else {
                     const parentIds = new Set(
-                      allTasks.map((t) => t.parent_id).filter(Boolean),
+                      uniqueTasks.map((t) => t.parent_id).filter(Boolean),
                     );
-                    displayTasks = allTasks.filter(
+                    displayTasks = uniqueTasks.filter(
                       (t) => !parentIds.has(t.task_id),
                     );
                   }
@@ -346,33 +358,51 @@ export default function CalendarPage() {
                     );
                   }
 
-                  return displayTasks.map((task) => {
-                    const catColor = getCategoryColor(task.category_id);
-                    return (
-                      <div
-                        key={task.id}
-                        className={`modal-task-item ${task.status}`}
-                        style={{ cursor: "pointer", position: "relative" }}
-                        onClick={() => setEditingTaskId(task.task_id)}
-                      >
-                        {catColor && (
-                          <div
-                            style={{
-                              position: "absolute",
-                              left: 0,
-                              top: 0,
-                              bottom: 0,
-                              width: "4px",
-                              backgroundColor: catColor,
-                              borderRadius: "4px 0 0 4px",
-                            }}
-                          />
-                        )}
+                  // Map to Task array
+                  const mockTasks = uniqueTasks.map(t => ({
+                    id: t.task_id,
+                    user_id: t.user_id,
+                    parent_id: t.parent_id || null,
+                    category_id: t.category_id || null,
+                    title: t.title || "제목 없음",
+                    description: null,
+                    status: t.status,
+                    low_priority: false,
+                    created_date: t.snapshot_date,
+                    completed_at: null,
+                    discarded_at: null,
+                    sort_order: 0,
+                    created_at: t.created_at,
+                    updated_at: t.created_at,
+                    is_snapshot: true // keep true to disable checkbox
+                  } as Task));
 
-                        <span>{task.title || "제목 없음"}</span>
-                      </div>
-                    );
-                  });
+                  // build tree
+                  const treeRoots = buildTaskTree(mockTasks);
+                  const displayRoots = viewMode === "tree" ? treeRoots : mockTasks.filter(t => displayTasks.some(dt => dt.task_id === t.id));
+
+                  return (
+                    <TaskTree
+                      tasks={displayRoots}
+                      onComplete={() => {}}
+                      onUncomplete={() => {}}
+                      onDiscard={() => {}}
+                      onUndiscard={() => {}}
+                      onDelete={() => {}}
+                      onUpdateSettings={async (id, updates) => {
+                        try {
+                          await updateTask(id, updates);
+                          const freshData = await fetchCalendarData(year, month);
+                          setCalendarData(freshData);
+                        } catch (e) {
+                          console.error("Failed to update task", e);
+                        }
+                      }}
+                      onAddChild={() => {}}
+                      onSaveDescription={() => {}}
+                      showAddInput={false}
+                    />
+                  );
                 })()}
               </div>
 
@@ -399,38 +429,6 @@ export default function CalendarPage() {
           </div>
         )}
 
-        {editingTaskId &&
-          (() => {
-            const selectedCellData = getCellData(selectedDate!);
-            const taskSnap = selectedCellData?.tasks.find(
-              (t) => t.task_id === editingTaskId,
-            );
-            if (!taskSnap) return null;
-
-            // Convert snapshot to Task type for TaskSettingsModal
-            const mockTask: any = {
-              id: taskSnap.task_id,
-              title: taskSnap.title || "",
-              category_id: taskSnap.category_id || null,
-              low_priority: false,
-            };
-
-            return (
-              <TaskSettingsModal
-                task={mockTask}
-                onClose={() => setEditingTaskId(null)}
-                onUpdate={async (id, updates) => {
-                  try {
-                    await updateTask(id, updates);
-                    const freshData = await fetchCalendarData(year, month);
-                    setCalendarData(freshData);
-                  } catch (e) {
-                    console.error("Failed to update task", e);
-                  }
-                }}
-              />
-            );
-          })()}
       </div>
     </div>
   );
