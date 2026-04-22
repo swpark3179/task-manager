@@ -358,23 +358,68 @@ export default function CalendarPage() {
                 <span className="calendar-cell-date">{date.getDate()}</span>
                 {cellData && ((cellData.tasks && cellData.tasks.length > 0) || (cellData.schedules && cellData.schedules.length > 0)) && (
                   <div className="calendar-cell-tasks">
-                    {cellData.schedules && cellData.schedules.map(schedule => (
-                      <div
-                        key={schedule.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedSchedule(schedule);
-                          setDragStart(schedule.start_date);
-                          setDragEnd(schedule.end_date);
-                          setIsDragging(false);
-                          setShowScheduleModal(true);
-                        }}
-                        className="calendar-task-item schedule-item"
-                        style={{ backgroundColor: 'var(--accent-primary)', color: 'white', borderRadius: '4px', padding: '2px 4px', fontSize: '10px' }}
-                      >
-                        <span className="calendar-task-title">{schedule.title}</span>
-                      </div>
-                    ))}
+                    {cellData.schedules && cellData.schedules.map(schedule => {
+                      const scheduleStartStr = schedule.start_date.split('T')[0];
+                      const scheduleEndStr = schedule.end_date.split('T')[0];
+
+                      const isFirstDayOfView = dateStr === scheduleStartStr || date.getDay() === 0 || date.getDate() === 1;
+                      const isLastDayOfView = dateStr === scheduleEndStr || date.getDay() === 6 || (new Date(year, month, 0).getDate() === date.getDate());
+
+                      const isActualStart = dateStr === scheduleStartStr;
+
+                      const blockStyle: React.CSSProperties = {
+                        backgroundColor: 'var(--accent-primary)',
+                        color: 'white',
+                        padding: '2px 4px',
+                        fontSize: '10px',
+                        minHeight: '16px',
+                        position: 'relative',
+                        zIndex: 1,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      };
+
+                      if (!isFirstDayOfView && !isActualStart) {
+                        blockStyle.borderTopLeftRadius = 0;
+                        blockStyle.borderBottomLeftRadius = 0;
+                        blockStyle.marginLeft = '-8px';
+                        blockStyle.paddingLeft = '8px';
+                      } else {
+                        blockStyle.borderTopLeftRadius = '4px';
+                        blockStyle.borderBottomLeftRadius = '4px';
+                      }
+
+                      if (!isLastDayOfView && dateStr !== scheduleEndStr) {
+                        blockStyle.borderTopRightRadius = 0;
+                        blockStyle.borderBottomRightRadius = 0;
+                        blockStyle.marginRight = '-8px';
+                        blockStyle.paddingRight = '8px';
+                      } else {
+                        blockStyle.borderTopRightRadius = '4px';
+                        blockStyle.borderBottomRightRadius = '4px';
+                      }
+
+                      const showTitle = isFirstDayOfView || isActualStart;
+
+                      return (
+                        <div
+                          key={schedule.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSchedule(schedule);
+                            setDragStart(schedule.start_date);
+                            setDragEnd(schedule.end_date);
+                            setIsDragging(false);
+                            setShowScheduleModal(true);
+                          }}
+                          className="calendar-task-item schedule-item"
+                          style={blockStyle}
+                        >
+                          <span className="calendar-task-title">{showTitle ? schedule.title : '\u00A0'}</span>
+                        </div>
+                      );
+                    })}
                     {cellData.tasks.filter(t => !t.is_snapshot).slice(0, 3).map((task) => {
                       const catColor = getCategoryColor(task.category_id);
                       return (
