@@ -37,6 +37,18 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
       setError('일정 제목을 입력해주세요.');
       return;
     }
+    if (!startDate) {
+      setError('시작일을 입력해주세요.');
+      return;
+    }
+    if (!endDate) {
+      setError('종료일을 입력해주세요.');
+      return;
+    }
+    if (endDate < startDate) {
+      setError('종료일은 시작일과 같거나 이후여야 합니다.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -90,19 +102,33 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <div style={{ flex: 1 }}>
-            <label className="form-label">시작일</label>
-            <input type="date" className="form-input" value={startDate} onChange={e => {
+            <label className="form-label">시작일 *</label>
+            <input
+              type="date"
+              className="form-input"
+              value={startDate}
+              required
+              onChange={e => {
                 setStartDate(e.target.value);
-                if (e.target.value > endDate) setEndDate(e.target.value);
-            }} disabled={!!schedule} />
+                if (e.target.value && endDate && e.target.value > endDate) setEndDate(e.target.value);
+              }}
+              disabled={!!schedule}
+            />
           </div>
           <span>~</span>
           <div style={{ flex: 1 }}>
-            <label className="form-label">종료일</label>
-            <input type="date" className="form-input" value={endDate} onChange={e => {
+            <label className="form-label">종료일 *</label>
+            <input
+              type="date"
+              className="form-input"
+              value={endDate}
+              required
+              min={startDate || undefined}
+              onChange={e => {
                 setEndDate(e.target.value);
-                if (e.target.value < startDate) setStartDate(e.target.value);
-            }} />
+                if (e.target.value && startDate && e.target.value < startDate) setStartDate(e.target.value);
+              }}
+            />
           </div>
         </div>
 
@@ -125,6 +151,7 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
             type="text"
             className="form-input"
             value={title}
+            required
             onChange={e => setTitle(e.target.value)}
             placeholder="일정 제목을 입력하세요"
             autoFocus
