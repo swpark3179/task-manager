@@ -428,7 +428,8 @@ async function fetchCalendarFromRemote(year: number, month: number): Promise<Cal
     .select('*')
     .eq('user_id', userId)
     .lte('start_date', endDate)
-    .gte('end_date', startDate);
+    .gte('end_date', startDate)
+    .order('start_date', { ascending: true });
 
   if (schedulesError) throw schedulesError;
 
