@@ -22,6 +22,8 @@
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-title {
@@ -56,11 +58,13 @@
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   gap: 2px;
   background: var(--border-light);
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border-light);
+  flex: 1;
 }
 
 .calendar-header-cell {
@@ -85,6 +89,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .calendar-cell:hover {
@@ -293,6 +299,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: block;
+  width: 100%;
 }
 
 .calendar-task-more {
@@ -385,4 +393,16 @@
 .calendar-cell.selected {
   background-color: var(--accent-light);
   border: 1px solid var(--accent-primary);
+}
+
+.calendar-cell-date {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Desktop specific calendar auto fill */
+@media (min-width: 768px) {
+  .page {
+    height: 100%;
+  }
 }

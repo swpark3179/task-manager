@@ -130,6 +130,10 @@ export default function CalendarPage() {
   const handleMouseDown = (dateStr: string, e: React.MouseEvent) => {
     // Only handle left click
     if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('.calendar-task-item') || target.closest('.calendar-task-more') || target.closest('.calendar-cell-date')) {
+      return;
+    }
     setIsDragging(true);
     setDragStart(dateStr);
     setDragEnd(dateStr);
@@ -161,7 +165,7 @@ export default function CalendarPage() {
 
     // Check if touch is on a task item, if so we don't want to start dragging the cell
     const target = e.target as HTMLElement;
-    if (target.closest('.calendar-task-item') || target.closest('.calendar-task-more')) {
+    if (target.closest('.calendar-task-item') || target.closest('.calendar-task-more') || target.closest('.calendar-cell-date')) {
       return;
     }
 
@@ -384,11 +388,7 @@ export default function CalendarPage() {
                           }
                         >
                           <span className="calendar-task-title">
-                            {task.title
-                              ? task.title.length > 3
-                                ? task.title.slice(0, 3) + "..."
-                                : task.title
-                              : "제목 없음"}
+                            {task.title ? task.title : "제목 없음"}
                           </span>
                         </div>
                       );
