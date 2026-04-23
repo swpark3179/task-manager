@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { taskCache, calendarCache, updateTaskInAllCaches, removeTaskFromAllCaches, clearAllCaches } from './cache';
+import { taskCache, calendarCache, categoryCache, updateTaskInAllCaches, removeTaskFromAllCaches, clearAllCaches } from './cache';
 import { v4 as uuidv4 } from 'uuid';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
@@ -54,10 +54,11 @@ function runBackgroundSync(promiseFactory: () => Promise<void>) {
 export async function fetchTasksByDate(date: string): Promise<Task[]> {
   const cached = await taskCache.get(date);
   if (cached) {
-    revalidateTasksByDate(date);
+    // 캐시 히트: 로컬 DB만 사용 (재검증 없음)
     return buildTaskTree(cached);
   }
 
+  // 캐시 미스: Supabase 직접 조회 (동기화 이전 단계 또는 범위 밖 날짜)
   setSyncStatus('syncing');
   try {
     const userId = await getCurrentUserId();
@@ -108,48 +109,6 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
   }
 }
 
-async function revalidateTasksByDate(date: string): Promise<void> {
-  try {
-    const userId = await getCurrentUserId();
-    const { data: currentTasks } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('created_date', date)
-      .order('sort_order', { ascending: true });
-
-    if (currentTasks) {
-      let tasks = currentTasks;
-
-      const { data: snapshots } = await supabase
-        .from('daily_task_snapshots')
-        .select('task_id')
-        .eq('user_id', userId)
-        .eq('snapshot_date', date);
-
-      if (snapshots && snapshots.length > 0) {
-        const snapshotTaskIds = snapshots.map(s => s.task_id);
-        const currentTaskIds = new Set(tasks.map(t => t.id));
-        const missingTaskIds = snapshotTaskIds.filter(id => !currentTaskIds.has(id));
-
-        if (missingTaskIds.length > 0) {
-          const { data: pastTasks } = await supabase
-            .from('tasks')
-            .select('*')
-            .in('id', missingTaskIds);
-
-          if (pastTasks) {
-          tasks = [...tasks, ...pastTasks.map(t => ({ ...t, is_snapshot: true }))];
-        }
-        }
-      }
-
-      await taskCache.set(date, tasks);
-    }
-  } catch {
-    // Silent
-  }
-}
 
 export async function createTask(input: CreateTaskInput): Promise<Task> {
   const userId = await getCurrentUserId();
@@ -539,26 +498,15 @@ export async function fetchCalendarData(
   const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
   const cached = await calendarCache.get(yearMonth);
   if (cached) {
-    // Background revalidation must hit Supabase directly (not the cached entry point)
-    revalidateCalendarData(year, month, onRevalidated);
+    // 캐시 히트: 로컬 DB만 사용 (재검증 없음)
+    // onRevalidated 콜백은 자동동기화 시 응답 포맧 호환성 용도로만 유지
+    if (onRevalidated) onRevalidated(cached);
     return cached;
   }
 
   return withSyncStatus(() => fetchCalendarFromRemote(year, month));
 }
 
-async function revalidateCalendarData(
-  year: number,
-  month: number,
-  onRevalidated?: (data: CalendarCellData[]) => void,
-): Promise<void> {
-  try {
-    const data = await fetchCalendarFromRemote(year, month);
-    if (onRevalidated) onRevalidated(data);
-  } catch (err) {
-    console.error('Calendar revalidation failed:', err);
-  }
-}
 
 // =============================================
 // Data Export
@@ -586,9 +534,9 @@ export async function fetchAllDataForExport(): Promise<{
 }
 
 export async function forceSync(): Promise<void> {
-  return withSyncStatus(async () => {
-    await clearAllCaches();
-  });
+  // 전체 재동기화: syncManager에 위임
+  const { performFullSync } = await import('./syncManager');
+  return performFullSync();
 }
 
 // =============================================
@@ -665,6 +613,10 @@ export async function fetchSchedulesForDateRange(startDate: string, endDate: str
 
 
 export async function fetchCategories(): Promise<Category[]> {
+  // 캐시 우선 조회
+  const cached = await categoryCache.get();
+  if (cached) return cached;
+
   return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
     const { data, error } = await supabase
@@ -674,7 +626,9 @@ export async function fetchCategories(): Promise<Category[]> {
       .order('name');
 
     if (error) throw error;
-    return data || [];
+    const result = data || [];
+    await categoryCache.set(result);
+    return result;
   });
 }
 

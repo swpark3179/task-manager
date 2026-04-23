@@ -1,7 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchAllDataForExport, forceSync } from '../lib/database';
 import { generateMarkdownExport } from '../utils/exportUtils';
+import {
+  SYNC_INTERVAL_OPTIONS,
+  getSyncInterval,
+  updateAutoSync,
+  getLastSyncLabel,
+  getLastSyncTime,
+} from '../lib/syncManager';
 import type { ProxySettings } from '../types';
 import CategoryManager from '../components/settings/CategoryManager';
 import './Pages.css';
@@ -17,12 +24,34 @@ export default function SettingsPage() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
+  // 동기화 설정
+  const [syncInterval, setSyncIntervalState] = useState<number>(0);
+  const [lastSyncLabel, setLastSyncLabel] = useState<string>('');
+
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // 동기화 상태 주기적 갱신
+  const refreshSyncLabel = useCallback(() => {
+    setLastSyncLabel(getLastSyncLabel());
+  }, []);
+
+  useEffect(() => {
+    setSyncIntervalState(getSyncInterval());
+    refreshSyncLabel();
+    const tick = setInterval(refreshSyncLabel, 30_000); // 30초마다 갱신
+    return () => clearInterval(tick);
+  }, [refreshSyncLabel]);
+
+  // 자동 동기화 주기 변경 핸들러
+  const handleSyncIntervalChange = (value: number) => {
+    setSyncIntervalState(value);
+    updateAutoSync(value);
+  };
 
   // Load settings
   useEffect(() => {
@@ -87,6 +116,7 @@ export default function SettingsPage() {
     setSyncing(true);
     try {
       await forceSync();
+      refreshSyncLabel();
       alert('동기화가 완료되었습니다.');
     } catch (err) {
       alert('동기화 실패: ' + String(err));
@@ -134,6 +164,8 @@ export default function SettingsPage() {
       setExporting(false);
     }
   };
+
+  const lastSyncTime = getLastSyncTime();
 
   return (
     <div className="page settings-page">
@@ -246,6 +278,7 @@ export default function SettingsPage() {
           </h3>
           <CategoryManager />
         </section>
+
         {/* Sync */}
         <section className="settings-section card">
           <h3 className="settings-section-title">
@@ -257,17 +290,65 @@ export default function SettingsPage() {
             </svg>
             데이터 동기화
           </h3>
-          <p className="settings-description">
-            서버와 수동으로 데이터를 동기화합니다. 이 작업 중에는 다른 기능을 사용할 수 없습니다.
-          </p>
-          <button
-            className="btn btn-primary"
-            onClick={handleForceSync}
-            disabled={syncing}
-            style={{ marginTop: '1rem', width: '100%' }}
-          >
-            {syncing ? '동기화 중...' : '일괄 동기화'}
-          </button>
+
+          {/* 마지막 동기화 시간 */}
+          <div className="settings-field settings-field-row" style={{ marginBottom: '0.75rem' }}>
+            <label className="settings-label">마지막 동기화</label>
+            <span className="settings-value" style={{ fontSize: '0.85rem' }}>
+              {lastSyncTime
+                ? `${lastSyncLabel} (${lastSyncTime.toLocaleString('ko-KR', { hour12: false })})`
+                : '동기화 기록 없음'}
+            </span>
+          </div>
+
+          {/* 자동 동기화 주기 선택 */}
+          <div className="settings-field" style={{ marginBottom: '1rem' }}>
+            <label className="settings-label" style={{ marginBottom: '0.5rem', display: 'block' }}>
+              자동 동기화 주기
+            </label>
+            <div className="sync-interval-options">
+              {SYNC_INTERVAL_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  className={`sync-interval-btn${syncInterval === opt.value ? ' active' : ''}`}
+                  onClick={() => handleSyncIntervalChange(opt.value)}
+                  type="button"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="settings-description" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+              {syncInterval === 0
+                ? '앱 시작 시에만 Supabase와 동기화합니다.'
+                : `앱 시작 후 ${SYNC_INTERVAL_OPTIONS.find(o => o.value === syncInterval)?.label ?? ''} 주기로 자동 동기화합니다.`}
+            </p>
+          </div>
+
+          {/* 수동 동기화 */}
+          <div className="settings-field">
+            <label className="settings-label" style={{ marginBottom: '0.5rem', display: 'block' }}>
+              수동 동기화
+            </label>
+            <p className="settings-description" style={{ marginBottom: '0.75rem' }}>
+              지금 즉시 서버와 데이터를 동기화합니다.
+            </p>
+            <button
+              className="btn btn-primary"
+              onClick={handleForceSync}
+              disabled={syncing}
+              style={{ width: '100%' }}
+            >
+              {syncing ? (
+                <>
+                  <span className="auth-spinner" style={{ width: 14, height: 14 }} />
+                  동기화 중...
+                </>
+              ) : (
+                '지금 동기화'
+              )}
+            </button>
+          </div>
         </section>
 
         {/* Data Export */}

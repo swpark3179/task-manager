@@ -313,6 +313,59 @@
   margin-bottom: var(--space-md);
 }
 
+.settings-description {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* === Sync interval segment buttons === */
+.sync-interval-options {
+  display: flex;
+  gap: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+}
+
+.sync-interval-btn {
+  flex: 1;
+  padding: 7px 8px;
+  font-size: 0.775rem;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: none;
+  border-right: 1px solid var(--border-light);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sync-interval-btn:last-child {
+  border-right: none;
+}
+
+.sync-interval-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+.sync-interval-btn.active {
+  background: var(--accent-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .sync-interval-btn {
+    font-size: 0.7rem;
+    padding: 6px 4px;
+  }
+}
+
 /* === Responsive === */
 @media (max-width: 767px) {
   .page-title {

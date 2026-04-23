@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { clearAllCaches } from '../lib/cache';
+import { syncIfNeeded, startAutoSync, stopAutoSync, performFullSync } from '../lib/syncManager';
 
 // =============================================
 // Authentication Context
@@ -29,6 +30,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // 세션이 있으면 조건부 동기화 + 자동 동기화 타이머 시작
+      if (session?.user) {
+        syncIfNeeded().catch(console.error);
+        startAutoSync();
+      }
     });
 
     // Listen for auth changes
@@ -45,6 +52,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!error) {
+      // 로그인 성공: 전체 동기화 + 자동 동기화 타이머 시작
+      performFullSync().catch(console.error);
+      startAutoSync();
+    }
     return { error: error?.message ?? null };
   };
 
@@ -54,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    stopAutoSync();
     await clearAllCaches();
     await supabase.auth.signOut();
   };

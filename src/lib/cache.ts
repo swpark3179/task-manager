@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase } from 'idb';
-import type { Task, CalendarCellData } from '../types';
+import type { Task, CalendarCellData, Category, Schedule } from '../types';
 
 // =============================================
 // IndexedDB Cache Module
@@ -7,7 +7,7 @@ import type { Task, CalendarCellData } from '../types';
 // =============================================
 
 const DB_NAME = 'task-manager-cache';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 interface CacheEntry<T> {
   data: T;
@@ -15,10 +15,12 @@ interface CacheEntry<T> {
 }
 
 const CACHE_TTL = {
-  tasks: 0,               // Always revalidate
+  tasks: Infinity,         // 동기화 시에만 갱신 (앱 시작 / 자동 동기화)
   progressLogs: 12 * 60 * 60 * 1000, // 12 hours
-  calendar: 0,             // Always revalidate
+  calendar: Infinity,      // 동기화 시에만 갱신
   history: 24 * 60 * 60 * 1000,      // 24 hours
+  categories: Infinity,    // 동기화 시에만 갱신
+  schedules: Infinity,     // 동기화 시에만 갱신
 };
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
@@ -35,6 +37,12 @@ function getDB(): Promise<IDBPDatabase> {
         }
         if (!db.objectStoreNames.contains('calendar')) {
           db.createObjectStore('calendar');
+        }
+        if (!db.objectStoreNames.contains('categories')) {
+          db.createObjectStore('categories');
+        }
+        if (!db.objectStoreNames.contains('schedules')) {
+          db.createObjectStore('schedules');
         }
       },
     });
@@ -311,13 +319,38 @@ export const calendarCache = {
   invalidate: (yearMonth?: string) => invalidateCache('calendar', yearMonth),
 };
 
+// =============================================
+// Categories Cache (단일 키 'all')
+// =============================================
+
+export const categoryCache = {
+  get: () => getCached<Category[]>('categories', 'all', CACHE_TTL.categories),
+  set: (data: Category[]) => setCache('categories', 'all', data),
+  invalidate: () => invalidateCache('categories'),
+};
+
+// =============================================
+// Schedules Cache (단일 키 'all')
+// =============================================
+
+export const scheduleCache = {
+  get: () => getCached<Schedule[]>('schedules', 'all', CACHE_TTL.schedules),
+  set: (data: Schedule[]) => setCache('schedules', 'all', data),
+  invalidate: () => invalidateCache('schedules'),
+};
+
+// =============================================
 // Clear all caches (e.g., on logout)
+// =============================================
+
 export async function clearAllCaches(): Promise<void> {
   try {
     const db = await getDB();
     await db.clear('tasks');
     await db.clear('progressLogs');
     await db.clear('calendar');
+    await db.clear('categories');
+    await db.clear('schedules');
   } catch {
     // Non-critical
   }
