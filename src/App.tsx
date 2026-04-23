@@ -8,6 +8,7 @@ import TodayPage from './pages/TodayPage';
 import HistoryPage from './pages/HistoryPage';
 import CalendarPage from './pages/CalendarPage';
 import SettingsPage from './pages/SettingsPage';
+import SyncBlocker from './components/common/SyncBlocker';
 import './index.css';
 
 function AppRoutes() {
@@ -54,6 +55,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <SyncBlocker />
       </AuthProvider>
     </BrowserRouter>
   );

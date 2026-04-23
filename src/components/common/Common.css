@@ -244,3 +244,45 @@
 .progress-bar-fill.in-progress {
   background: var(--nord13);
 }
+
+/* === Sync Blocker (input-blocking overlay) === */
+.sync-blocker {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: progress;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+  animation: fadeIn 0.15s ease;
+}
+
+.sync-blocker-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.9375rem;
+  color: var(--text-primary);
+}
+
+.sync-blocker-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.sync-blocker-text {
+  font-weight: 500;
+}

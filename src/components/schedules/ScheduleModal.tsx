@@ -101,106 +101,137 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1000 }}>
+    <div className="modal-overlay schedule-modal-overlay" onClick={onClose}>
       <div
-        className="modal-content"
+        className="modal-content schedule-modal"
         onClick={(e) => e.stopPropagation()}
-        style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '600px', width: '90%' }}
       >
-        <h2 style={{ margin: 0 }}>{schedule ? '일정 수정' : '일정 등록'}</h2>
-
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <div style={{ flex: 1 }}>
-            <label className="form-label">시작일 *</label>
-            <input
-              type="date"
-              className="form-input"
-              value={startDate}
-              required
-              onChange={e => {
-                setStartDate(e.target.value);
-                if (e.target.value && endDate && e.target.value > endDate) setEndDate(e.target.value);
-              }}
-              disabled={!!schedule}
-            />
-          </div>
-          <span>~</span>
-          <div style={{ flex: 1 }}>
-            <label className="form-label">종료일 *</label>
-            <input
-              type="date"
-              className="form-input"
-              value={endDate}
-              required
-              min={startDate || undefined}
-              onChange={e => {
-                setEndDate(e.target.value);
-                if (e.target.value && startDate && e.target.value < startDate) setStartDate(e.target.value);
-              }}
-            />
-          </div>
+        <div className="schedule-modal-header">
+          <h2 className="schedule-modal-title">{schedule ? '일정 수정' : '일정 등록'}</h2>
+          <button
+            type="button"
+            className="schedule-modal-close"
+            onClick={onClose}
+            aria-label="닫기"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
-        {isSameDay && (
-          <div>
-            <label className="form-label">예정 시간 (선택)</label>
+        <div className="schedule-modal-body">
+          <div className="schedule-modal-row">
+            <div className="schedule-modal-field">
+              <label className="form-label">시작일 *</label>
+              <input
+                type="date"
+                className="form-input"
+                value={startDate}
+                required
+                onChange={e => {
+                  setStartDate(e.target.value);
+                  if (e.target.value && endDate && e.target.value > endDate) setEndDate(e.target.value);
+                }}
+                disabled={!!schedule}
+              />
+            </div>
+            <span className="schedule-modal-row-sep" aria-hidden="true">~</span>
+            <div className="schedule-modal-field">
+              <label className="form-label">종료일 *</label>
+              <input
+                type="date"
+                className="form-input"
+                value={endDate}
+                required
+                min={startDate || undefined}
+                onChange={e => {
+                  setEndDate(e.target.value);
+                  if (e.target.value && startDate && e.target.value < startDate) setStartDate(e.target.value);
+                }}
+              />
+            </div>
+          </div>
+
+          {isSameDay && (
+            <div className="schedule-modal-field">
+              <label className="form-label">예정 시간 (선택)</label>
+              <input
+                type="text"
+                className="form-input"
+                value={estimatedTime}
+                onChange={e => setEstimatedTime(e.target.value)}
+                placeholder="예: 14:00 또는 2시간"
+              />
+            </div>
+          )}
+
+          <div className="schedule-modal-field">
+            <label className="form-label">제목 *</label>
             <input
               type="text"
               className="form-input"
-              value={estimatedTime}
-              onChange={e => setEstimatedTime(e.target.value)}
-              placeholder="예: 14:00 또는 2시간"
+              value={title}
+              required
+              onChange={e => setTitle(e.target.value)}
+              placeholder="일정 제목을 입력하세요"
+              autoFocus
             />
           </div>
-        )}
 
-        <div>
-          <label className="form-label">제목 *</label>
-          <input
-            type="text"
-            className="form-input"
-            value={title}
-            required
-            onChange={e => setTitle(e.target.value)}
-            placeholder="일정 제목을 입력하세요"
-            autoFocus
-          />
+          <div className="schedule-modal-field">
+            <label className="form-label">카테고리</label>
+            <select
+              className="form-input"
+              value={categoryId}
+              onChange={e => setCategoryId(e.target.value)}
+            >
+              <option value="">(선택 안함)</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="schedule-modal-field" data-color-mode="light">
+            <label className="form-label">상세 내용 (마크다운)</label>
+            <MDEditor
+              value={description}
+              onChange={val => setDescription(val || '')}
+              height={200}
+              preview="edit"
+            />
+          </div>
+
+          {error && <div className="schedule-modal-error">{error}</div>}
         </div>
 
-        <div>
-          <label className="form-label">카테고리</label>
-          <select
-            className="form-input"
-            value={categoryId}
-            onChange={e => setCategoryId(e.target.value)}
-          >
-            <option value="">(선택 안함)</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div data-color-mode="light" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label className="form-label">상세 내용 (마크다운)</label>
-          <MDEditor
-            value={description}
-            onChange={val => setDescription(val || '')}
-            height={200}
-            preview="edit"
-          />
-        </div>
-
-        {error && <div style={{ color: 'var(--nord11)', fontSize: '0.875rem' }}>{error}</div>}
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+        <div className="schedule-modal-footer">
           {schedule && (
-            <button className="btn btn-ghost" onClick={handleDelete} disabled={loading} style={{ color: 'var(--nord11)', marginRight: 'auto' }}>
+            <button
+              type="button"
+              className="btn btn-ghost schedule-modal-delete"
+              onClick={handleDelete}
+              disabled={loading}
+            >
               삭제
             </button>
           )}
-          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>취소</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={loading}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={onClose}
+            disabled={loading}
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleSave}
+            disabled={loading}
+          >
             {loading ? '저장 중...' : '저장'}
           </button>
         </div>

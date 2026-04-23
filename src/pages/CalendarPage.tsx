@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSwipe } from '../hooks/useSwipe';
+import { useRubberBandScroll } from '../hooks/useRubberBandScroll';
 import {
   fetchCalendarData,
   fetchCategories,
@@ -58,6 +59,12 @@ export default function CalendarPage() {
   const isLongPressTriggeredRef = useRef(false);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const calendarGridRef = useRef<HTMLDivElement>(null);
+
+  // 월 전환 슬라이드 애니메이션
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
+  const [animKey, setAnimKey] = useState(0);
+
+  const modalBodyRef = useRubberBandScroll<HTMLDivElement>();
 
 
 
@@ -120,6 +127,8 @@ export default function CalendarPage() {
   const dayLabels = ["일", "월", "화", "수", "목", "금", "토"];
 
   const prevMonth = () => {
+    setSlideDirection('left');
+    setAnimKey((k) => k + 1);
     if (month === 1) {
       setYear((y) => y - 1);
       setMonth(12);
@@ -127,6 +136,8 @@ export default function CalendarPage() {
   };
 
   const nextMonth = () => {
+    setSlideDirection('right');
+    setAnimKey((k) => k + 1);
     if (month === 12) {
       setYear((y) => y + 1);
       setMonth(1);
@@ -135,11 +146,20 @@ export default function CalendarPage() {
 
   const swipeHandlers = useSwipe({
     onSwipedLeft: nextMonth,
-    onSwipedRight: prevMonth
+    onSwipedRight: prevMonth,
+    minSwipeDistance: 110,
+    horizontalRatio: 1.2,
   });
 
   const goToToday = () => {
     const now = new Date();
+    const isSameMonth = now.getFullYear() === year && now.getMonth() + 1 === month;
+    if (!isSameMonth) {
+      const goingForward =
+        now.getFullYear() > year || (now.getFullYear() === year && now.getMonth() + 1 > month);
+      setSlideDirection(goingForward ? 'right' : 'left');
+      setAnimKey((k) => k + 1);
+    }
     setYear(now.getFullYear());
     setMonth(now.getMonth() + 1);
   };
@@ -402,10 +422,12 @@ export default function CalendarPage() {
 
         <div
           ref={calendarGridRef}
-          className="calendar-grid"
+          key={animKey}
+          className={`calendar-grid ${slideDirection === 'right' ? 'slide-enter-right' : ''} ${slideDirection === 'left' ? 'slide-enter-left' : ''}`}
           onMouseUp={handleMouseUp}
           onMouseLeave={() => { if (isDragging) handleMouseUp(); }}
           onTouchMove={handleTouchMove}
+          onAnimationEnd={() => setSlideDirection(null)}
         >
           <div className="calendar-header-row">
             {dayLabels.map((day) => (
@@ -512,6 +534,20 @@ export default function CalendarPage() {
                       const continuesRight = !bar.isActualEnd;
                       const showTitle = bar.isActualStart || bar.startCol === 0;
                       const catColor = getCategoryColor(bar.schedule.category_id);
+                      const fallbackDate = bar.schedule.start_date.split('T')[0];
+                      const resolveDateFromX = (clientX: number): string => {
+                        if (calendarGridRef.current) {
+                          const cells = calendarGridRef.current.querySelectorAll('.calendar-cell[data-date]');
+                          for (const cell of Array.from(cells)) {
+                            const r = cell.getBoundingClientRect();
+                            if (clientX >= r.left && clientX <= r.right) {
+                              const d = cell.getAttribute('data-date');
+                              if (d) return d;
+                            }
+                          }
+                        }
+                        return fallbackDate;
+                      };
                       return (
                         <div
                           key={`${bar.schedule.id}-w${wIdx}`}
@@ -523,7 +559,7 @@ export default function CalendarPage() {
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            openScheduleBar(bar.schedule);
+                            handleCellClick(resolveDateFromX(e.clientX));
                           }}
                           onMouseDown={(e) => e.stopPropagation()}
                           onTouchStart={(e) => e.stopPropagation()}
@@ -578,13 +614,14 @@ export default function CalendarPage() {
             }}
           >
             <div
-              className="modal-content"
+              className="modal-content calendar-day-modal"
               onClick={(e) => {
                 e.stopPropagation();
               }}
               style={{
                 display: "flex",
                 flexDirection: "column",
+                height: "85vh",
                 maxHeight: "85vh",
                 maxWidth: "480px",
               }}
@@ -664,6 +701,7 @@ export default function CalendarPage() {
               </div>
 
               <div
+                ref={modalBodyRef}
                 className="modal-body-scroll"
                 style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}
               >
@@ -686,7 +724,7 @@ export default function CalendarPage() {
                   </div>
                   <ScheduleSection
                     schedules={selectedCellSchedules}
-                    onItemClick={(s) => openScheduleBar(s)}
+                    onEdit={(s) => openScheduleBar(s)}
                     emptyText="이 날짜에 걸쳐있는 일정이 없습니다."
                   />
                 </section>

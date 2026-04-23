@@ -3,16 +3,23 @@ import { TouchEvent, useState } from 'react';
 interface SwipeInput {
   onSwipedLeft: () => void;
   onSwipedRight: () => void;
+  /** 스와이프로 인식할 최소 가로 거리(px). 기본 50 */
+  minSwipeDistance?: number;
+  /** 가로 vs 세로 비율 임계값. 기본 1 (가로가 세로보다 큰 경우만) */
+  horizontalRatio?: number;
 }
 
-export function useSwipe({ onSwipedLeft, onSwipedRight }: SwipeInput) {
+export function useSwipe({
+  onSwipedLeft,
+  onSwipedRight,
+  minSwipeDistance = 50,
+  horizontalRatio = 1,
+}: SwipeInput) {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchEndX, setTouchEndX] = useState<number | null>(null);
 
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [touchEndY, setTouchEndY] = useState<number | null>(null);
-
-  const minSwipeDistance = 50;
 
   const onTouchStart = (e: TouchEvent) => {
     setTouchEndX(null);
@@ -33,8 +40,10 @@ export function useSwipe({ onSwipedLeft, onSwipedRight }: SwipeInput) {
     const distanceX = touchStartX - touchEndX;
     const distanceY = touchStartY - touchEndY;
 
-    // Ensure it's mostly a horizontal swipe
-    if (Math.abs(distanceX) > Math.abs(distanceY) && Math.abs(distanceX) > minSwipeDistance) {
+    if (
+      Math.abs(distanceX) > Math.abs(distanceY) * horizontalRatio &&
+      Math.abs(distanceX) > minSwipeDistance
+    ) {
       if (distanceX > 0) {
         onSwipedLeft();
       } else {

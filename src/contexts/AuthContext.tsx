@@ -31,9 +31,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       setLoading(false);
 
-      // 세션이 있으면 조건부 동기화 + 자동 동기화 타이머 시작
+      // 세션이 있으면 조건부 동기화 + 자동 동기화 타이머 시작 (비동기)
       if (session?.user) {
-        syncIfNeeded().catch(console.error);
+        void syncIfNeeded().catch(console.error);
         startAutoSync();
       }
     });
@@ -53,8 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (!error) {
-      // 로그인 성공: 전체 동기화 + 자동 동기화 타이머 시작
-      performFullSync().catch(console.error);
+      // 로그인 성공: 비동기 전체 동기화 (UI는 SyncBlocker가 입력 차단)
+      void performFullSync().catch(console.error);
       startAutoSync();
     }
     return { error: error?.message ?? null };

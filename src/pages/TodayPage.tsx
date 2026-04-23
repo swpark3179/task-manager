@@ -195,7 +195,7 @@ export default function TodayPage() {
           </div>
           <ScheduleSection
             schedules={schedules}
-            onItemClick={(s) => {
+            onEdit={(s) => {
               setEditingSchedule(s);
               setShowScheduleModal(true);
             }}
