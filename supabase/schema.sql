@@ -120,6 +120,7 @@ CREATE TRIGGER progress_logs_updated_at
 CREATE TABLE schedules (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL, -- references auth.users(id)
+  category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   description TEXT,
   start_date DATE NOT NULL,
@@ -128,6 +129,8 @@ CREATE TABLE schedules (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
+
+CREATE INDEX idx_schedules_category_id ON schedules(category_id);
 
 ALTER TABLE schedules ENABLE ROW LEVEL SECURITY;
 

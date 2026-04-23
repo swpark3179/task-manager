@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import MDEditor from '@uiw/react-md-editor';
-import { createSchedule, updateSchedule, deleteSchedule } from '../../lib/database';
-import type { Schedule } from '../../types';
+import { createSchedule, updateSchedule, deleteSchedule, fetchCategories } from '../../lib/database';
+import type { Schedule, Category } from '../../types';
 
 interface ScheduleModalProps {
   startDate: string;
@@ -17,10 +17,16 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
   const [title, setTitle] = useState(schedule?.title || '');
   const [description, setDescription] = useState(schedule?.description || '');
   const [estimatedTime, setEstimatedTime] = useState(schedule?.estimated_time || '');
+  const [categoryId, setCategoryId] = useState<string>(schedule?.category_id || '');
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isSameDay = startDate === endDate;
+
+  useEffect(() => {
+    fetchCategories().then(setCategories).catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (schedule) {
@@ -29,6 +35,7 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
       setTitle(schedule.title);
       setDescription(schedule.description || '');
       setEstimatedTime(schedule.estimated_time || '');
+      setCategoryId(schedule.category_id || '');
     }
   }, [schedule]);
 
@@ -57,6 +64,7 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
       if (schedule) {
         await updateSchedule(schedule.id, {
           title: title.trim(),
+          category_id: categoryId || null,
           description: description || null,
           start_date: startDate,
           end_date: endDate,
@@ -65,6 +73,7 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
       } else {
         await createSchedule({
           title: title.trim(),
+          category_id: categoryId || null,
           description: description || null,
           start_date: startDate,
           end_date: endDate,
@@ -156,6 +165,20 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
             placeholder="일정 제목을 입력하세요"
             autoFocus
           />
+        </div>
+
+        <div>
+          <label className="form-label">카테고리</label>
+          <select
+            className="form-input"
+            value={categoryId}
+            onChange={e => setCategoryId(e.target.value)}
+          >
+            <option value="">(선택 안함)</option>
+            {categories.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
         </div>
 
         <div data-color-mode="light" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

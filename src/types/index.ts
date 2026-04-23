@@ -17,6 +17,7 @@ export interface Category {
 export interface Schedule {
   id: string;
   user_id: string;
+  category_id: string | null;
   title: string;
   description: string | null;
   start_date: string;
@@ -113,6 +114,7 @@ export interface UpdateTaskInput {
 
 export interface CreateScheduleInput {
   title: string;
+  category_id?: string | null;
   description?: string | null;
   start_date: string;
   end_date: string;
@@ -121,6 +123,7 @@ export interface CreateScheduleInput {
 
 export interface UpdateScheduleInput {
   title?: string;
+  category_id?: string | null;
   description?: string | null;
   start_date?: string;
   end_date?: string;

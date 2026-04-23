@@ -362,23 +362,18 @@ export default function CalendarPage() {
 
   return (
     <div className="page calendar-page" {...swipeHandlers}>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">달력</h1>
-          <p className="page-subtitle">작업 현황을 한눈에 확인하세요</p>
-        </div>
-      </div>
-
       <div className="page-content">
         <div className="calendar-nav">
-          <button className="date-navigator-btn" onClick={prevMonth}>
+          <button className="calendar-nav-btn" onClick={prevMonth} aria-label="이전 달">
             <svg
-              width="16"
-              height="16"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
               <polyline points="15 18 9 12 15 6" />
             </svg>
@@ -386,19 +381,21 @@ export default function CalendarPage() {
           <span className="calendar-month-label">
             {formatMonthYear(new Date(year, month - 1))}
           </span>
-          <button className="date-navigator-btn" onClick={nextMonth}>
+          <button className="calendar-nav-btn" onClick={nextMonth} aria-label="다음 달">
             <svg
-              width="16"
-              height="16"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
-          <button className="date-navigator-today" onClick={goToToday}>
+          <button className="calendar-nav-today" onClick={goToToday} aria-label="오늘로 이동">
             오늘
           </button>
         </div>
@@ -426,11 +423,20 @@ export default function CalendarPage() {
             const laneCount = bars.reduce((m, b) => Math.max(m, b.lane + 1), 0);
             const laneAreaHeight = laneCount * (BAR_HEIGHT + BAR_GAP);
 
+            const perCellLaneHeight: number[] = week.map((_, cIdx) => {
+              let maxLane = -1;
+              for (const bar of bars) {
+                if (cIdx >= bar.startCol && cIdx <= bar.endCol) {
+                  if (bar.lane > maxLane) maxLane = bar.lane;
+                }
+              }
+              return maxLane === -1 ? 0 : (maxLane + 1) * (BAR_HEIGHT + BAR_GAP);
+            });
+
             return (
               <div
                 key={`week-${wIdx}`}
                 className="calendar-week-row"
-                style={{ ['--lane-area-height' as string]: `${laneAreaHeight}px` }}
               >
                 {week.map((date, cIdx) => {
                   if (!date) {
@@ -455,6 +461,7 @@ export default function CalendarPage() {
                       key={dateStr}
                       data-date={dateStr}
                       className={`calendar-cell ${isToday ? "today" : ""} ${cellData ? "has-data" : ""} ${isSunday ? "sunday" : ""} ${isSaturday ? "saturday" : ""} ${isDragging && dragStart && dragEnd && ((dragStart <= dragEnd && dateStr >= dragStart && dateStr <= dragEnd) || (dragStart > dragEnd && dateStr <= dragStart && dateStr >= dragEnd)) ? "selected" : ""}`}
+                      style={{ ['--cell-lane-height' as string]: `${perCellLaneHeight[cIdx]}px` }}
                       onMouseDown={(e) => handleMouseDown(dateStr, e)}
                       onMouseEnter={() => handleMouseEnter(dateStr)}
                       onTouchStart={(e) => handleTouchStart(dateStr, e)}
@@ -504,6 +511,7 @@ export default function CalendarPage() {
                       const continuesLeft = !bar.isActualStart;
                       const continuesRight = !bar.isActualEnd;
                       const showTitle = bar.isActualStart || bar.startCol === 0;
+                      const catColor = getCategoryColor(bar.schedule.category_id);
                       return (
                         <div
                           key={`${bar.schedule.id}-w${wIdx}`}
@@ -511,6 +519,7 @@ export default function CalendarPage() {
                           style={{
                             gridColumn: `${bar.startCol + 1} / ${bar.endCol + 2}`,
                             gridRow: bar.lane + 1,
+                            ...(catColor ? { background: catColor } : undefined),
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
