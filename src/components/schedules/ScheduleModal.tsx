@@ -357,6 +357,10 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
                     선택한 알림 시각이 이미 지났습니다. 저장은 가능하지만 알림은 표시되지 않습니다.
                   </div>
                 )}
+
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                  iOS 에서는 앱이 화면에 켜져 있는 동안 알림이 표시되지 않을 수 있습니다. 알림 시각 직전에는 다른 앱으로 전환하거나 화면을 잠가 두세요.
+                </div>
               </div>
             )}
           </div>

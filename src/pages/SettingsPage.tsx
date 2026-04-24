@@ -15,6 +15,7 @@ import {
   getNotificationSettings,
   setNotificationSettings,
   rescheduleAll,
+  sendTestNotification,
   type NotificationSettings,
 } from '../lib/notifications';
 import type { ProxySettings } from '../types';
@@ -40,6 +41,7 @@ export default function SettingsPage() {
   const [notifSettings, setNotifSettings] = useState<NotificationSettings | null>(null);
   const [notifPermission, setNotifPermission] = useState<boolean>(false);
   const [notifBusy, setNotifBusy] = useState<boolean>(false);
+  const [notifTestResult, setNotifTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -94,6 +96,26 @@ export default function SettingsPage() {
       if (granted) await rescheduleAll();
     } finally {
       setNotifBusy(false);
+    }
+  };
+
+  const handleSendTestNotification = async () => {
+    setNotifBusy(true);
+    setNotifTestResult('알림을 등록하는 중...');
+    try {
+      const result = await sendTestNotification();
+      if (result.scheduled) {
+        setNotifTestResult(
+          `✅ 등록 성공 (대기열 ${result.pendingCount}개). 약 10초 뒤 알림이 표시됩니다. iOS 에서는 앱이 화면에 켜져 있으면 보이지 않을 수 있으니 홈으로 빠져나가 주세요.`,
+        );
+        // 권한 상태도 다시 확인
+        setNotifPermission(await hasPermission());
+      } else {
+        setNotifTestResult(`❌ 등록 실패: ${result.error || '알 수 없는 오류'}`);
+      }
+    } finally {
+      setNotifBusy(false);
+      setTimeout(() => setNotifTestResult(null), 12_000);
     }
   };
 
@@ -353,6 +375,30 @@ export default function SettingsPage() {
               <p className="settings-description" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
                 권한이 거부된 경우 OS 설정에서 직접 허용해야 합니다.
               </p>
+            </div>
+          )}
+
+          {notifPermission && (
+            <div className="settings-field" style={{ marginBottom: '0.75rem' }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleSendTestNotification}
+                disabled={notifBusy}
+                type="button"
+              >
+                10초 후 테스트 알림 보내기
+              </button>
+              <p className="settings-description" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+                실제 알림이 정상적으로 표시되는지 확인합니다. iOS 에서는 앱이 화면에 켜져 있으면 표시되지 않을 수 있으니 홈 화면으로 이동해 주세요.
+              </p>
+              {notifTestResult && (
+                <div
+                  className="settings-test-result animate-fade-in"
+                  style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}
+                >
+                  {notifTestResult}
+                </div>
+              )}
             </div>
           )}
 

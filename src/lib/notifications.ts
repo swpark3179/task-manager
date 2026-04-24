@@ -128,6 +128,25 @@ export async function ensurePermission(): Promise<boolean> {
 }
 
 // ---------------------------------------------
+// iOS timezone workaround
+// tauri-plugin-notification v2.3.3 (iOS) 는 Date 를 받을 때 timezone 을
+// 제대로 처리하지 못해 UTC components 를 로컬 시각으로 해석합니다.
+// (참고: tauri-apps/plugins-workspace#3256)
+// 그래서 JS 측에서 "원하는 로컬 시각" 이 UTC components 가 되도록
+// 보정한 가짜 Date 를 만들어 전달합니다.
+// ---------------------------------------------
+
+function adjustForNativeTimezone(d: Date): Date {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
+}
+
+// Schedule.at(date, repeating, allowWhileIdle) 의 의미를 명확히 하기 위한 상수
+// repeating=false : 1회성 알림
+// allowWhileIdle=true : Android Doze 모드에서도 발화 (iOS 에서는 무시됨)
+const SCHEDULE_REPEATING = false;
+const SCHEDULE_ALLOW_WHILE_IDLE = true;
+
+// ---------------------------------------------
 // ID hashing (UUID -> stable 32-bit positive int in [1, 999_999])
 // ---------------------------------------------
 
@@ -198,8 +217,23 @@ async function scheduleOne(schedule: Schedule): Promise<void> {
       id,
       title: schedule.title,
       body,
-      schedule: mod.Schedule.at(notifyAt, false, true),
+      schedule: mod.Schedule.at(
+        adjustForNativeTimezone(notifyAt),
+        SCHEDULE_REPEATING,
+        SCHEDULE_ALLOW_WHILE_IDLE,
+      ),
     });
+
+    if (import.meta.env.DEV) {
+      try {
+        const pending = await mod.pending();
+        console.log(
+          `[notifications] scheduled id=${id} at=${notifyAt.toISOString()} pendingCount=${(pending || []).length}`,
+        );
+      } catch {
+        // ignore
+      }
+    }
   } catch (err) {
     console.error('[notifications] schedule one failed:', err);
   }
@@ -328,7 +362,11 @@ async function rescheduleDailySummaries(settings: NotificationSettings): Promise
         id: dailySummaryNotificationId(offset),
         title: '오늘의 할일 요약',
         body: formatSummaryBody(summary),
-        schedule: mod.Schedule.at(fireAt, false, true),
+        schedule: mod.Schedule.at(
+          adjustForNativeTimezone(fireAt),
+          SCHEDULE_REPEATING,
+          SCHEDULE_ALLOW_WHILE_IDLE,
+        ),
       });
     } catch (err) {
       console.error('[notifications] daily summary schedule failed:', err);
@@ -401,6 +439,61 @@ export async function refreshScheduleNotification(schedule: Schedule): Promise<v
   const settings = await getNotificationSettings();
   if (!settings.perScheduleEnabled) return;
   if (schedule.notify_at) await scheduleOne(schedule);
+}
+
+// ---------------------------------------------
+// Test notification (for SettingsPage)
+// ---------------------------------------------
+
+const TEST_NOTIFICATION_ID = 999_999;
+
+export interface TestNotificationResult {
+  scheduled: boolean;
+  pendingCount: number;
+  error?: string;
+}
+
+/**
+ * 10초 뒤 발화하는 테스트 알림을 OS 큐에 등록합니다.
+ * 권한 요청 → 등록 → pending 개수 확인까지 한 번에 수행하며
+ * 사용자가 "알림이 등록되긴 했는지" 즉시 검증할 수 있게 합니다.
+ */
+export async function sendTestNotification(): Promise<TestNotificationResult> {
+  const mod = await loadNotifModule();
+  if (!mod) {
+    return { scheduled: false, pendingCount: 0, error: '알림 플러그인을 사용할 수 없습니다.' };
+  }
+  try {
+    const granted = await ensurePermission();
+    if (!granted) {
+      return { scheduled: false, pendingCount: 0, error: '알림 권한이 허용되지 않았습니다.' };
+    }
+    const fireAt = new Date(Date.now() + 10_000);
+    await mod.sendNotification({
+      id: TEST_NOTIFICATION_ID,
+      title: '테스트 알림',
+      body: '알림이 정상 동작하면 약 10초 뒤에 이 메시지가 표시됩니다.',
+      schedule: mod.Schedule.at(
+        adjustForNativeTimezone(fireAt),
+        SCHEDULE_REPEATING,
+        SCHEDULE_ALLOW_WHILE_IDLE,
+      ),
+    });
+    let pendingCount = 0;
+    try {
+      const pending = await mod.pending();
+      pendingCount = (pending || []).length;
+    } catch {
+      // ignore
+    }
+    return { scheduled: true, pendingCount };
+  } catch (err: any) {
+    return {
+      scheduled: false,
+      pendingCount: 0,
+      error: err?.message ? String(err.message) : String(err),
+    };
+  }
 }
 
 // ---------------------------------------------
