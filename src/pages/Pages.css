@@ -169,6 +169,8 @@
   min-height: 0;
   overflow: hidden;
   margin-top: var(--cell-lane-height, 0px);
+  position: relative;
+  z-index: 2;
 }
 
 .calendar-cell:hover {
@@ -410,6 +412,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-secondary);
+  cursor: pointer;
+  position: relative;
+  z-index: 3;
 }
 
 .calendar-task-item.completed .calendar-task-title {
@@ -440,6 +445,9 @@
   text-align: center;
   margin-top: 2px;
   font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  z-index: 3;
 }
 
 /* === Schedule bars overlay === */
@@ -635,6 +643,21 @@
   to { transform: scale(1); opacity: 1; }
 }
 
+.modal-content.calendar-day-modal {
+  display: flex;
+  flex-direction: column;
+  width: 92%;
+  max-width: 480px;
+  height: 85vh;
+  max-height: 85vh;
+}
+
+@media (max-width: 767px) {
+  .modal-content.calendar-day-modal {
+    height: 68vh;
+    max-height: 68vh;
+  }
+}
 
 .modal-task-list {
   display: flex;
@@ -840,6 +863,144 @@
     display: none;
   }
   .schedule-modal .form-input {
+    font-size: 16px; /* prevent iOS zoom */
+  }
+}
+
+/* === Task Settings Modal (mobile-friendly) === */
+.task-settings-modal-overlay {
+  z-index: 1200;
+  align-items: center;
+}
+
+.modal-content.task-settings-modal {
+  max-width: 420px;
+  width: 92%;
+  padding: 0;
+  gap: 0;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.task-settings-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-primary);
+}
+
+.task-settings-modal-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.task-settings-modal-close {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.task-settings-modal-close:hover {
+  background: var(--bg-hover);
+}
+
+.task-settings-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.task-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-settings-modal .form-input {
+  min-height: 44px;
+  font-size: 1rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.task-settings-loading {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  padding: 10px 0;
+}
+
+.task-settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  cursor: pointer;
+  font-size: 0.95rem;
+  user-select: none;
+}
+.task-settings-checkbox-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.task-settings-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-primary);
+  position: sticky;
+  bottom: 0;
+}
+
+.task-settings-modal-footer .btn {
+  min-height: 44px;
+  padding-left: 18px;
+  padding-right: 18px;
+}
+
+@media (max-width: 767px) {
+  .task-settings-modal-overlay {
+    align-items: flex-end;
+  }
+  .modal-content.task-settings-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 88vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    margin-top: auto;
+    align-self: stretch;
+  }
+  .task-settings-modal-header {
+    padding: 16px;
+  }
+  .task-settings-modal-body {
+    padding: 14px 16px;
+    gap: 16px;
+  }
+  .task-settings-modal-footer {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .task-settings-modal .form-input {
     font-size: 16px; /* prevent iOS zoom */
   }
 }

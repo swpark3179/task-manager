@@ -357,6 +357,8 @@ export default function CalendarPage() {
   };
 
   const handleCellClick = (dateStr: string) => {
+    setDragStart(null);
+    setDragEnd(null);
     setSelectedDate(dateStr);
   };
   const handleNavigate = (dateStr: string) => {
@@ -505,6 +507,10 @@ export default function CalendarPage() {
                                       ? { borderLeft: `3px solid ${catColor}` }
                                       : undefined
                                   }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCellClick(dateStr);
+                                  }}
                                 >
                                   <span className="calendar-task-title">
                                     {task.title ? task.title : "제목 없음"}
@@ -513,7 +519,13 @@ export default function CalendarPage() {
                               );
                             })}
                             {tasks.length > 3 && (
-                              <div className="calendar-task-more">
+                              <div
+                                className="calendar-task-more"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCellClick(dateStr);
+                                }}
+                              >
                                 +{tasks.length - 3}
                               </div>
                             )}
@@ -617,13 +629,6 @@ export default function CalendarPage() {
               className="modal-content calendar-day-modal"
               onClick={(e) => {
                 e.stopPropagation();
-              }}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                height: "85vh",
-                maxHeight: "85vh",
-                maxWidth: "480px",
               }}
             >
               <div

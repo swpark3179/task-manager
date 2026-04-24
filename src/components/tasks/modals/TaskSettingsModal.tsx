@@ -39,58 +39,67 @@ export default function TaskSettingsModal({ task, onClose, onUpdate }: TaskSetti
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center'
-    }}>
-      <div className="modal-content card" onClick={e => e.stopPropagation()} style={{
-        width: '90%', maxWidth: '400px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px'
-      }}>
-        <h3 style={{ margin: 0, fontSize: '18px' }}>할일 설정</h3>
-
-        <div className="settings-field">
-          <label className="settings-label" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>작업 이름</label>
-          <input
-            className="input"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            style={{ width: '100%', boxSizing: 'border-box' }}
-            autoFocus
-          />
+    <div className="modal-overlay task-settings-modal-overlay" onClick={onClose}>
+      <div
+        className="modal-content task-settings-modal"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="task-settings-modal-header">
+          <h3 className="task-settings-modal-title">할일 설정</h3>
+          <button
+            type="button"
+            className="task-settings-modal-close"
+            onClick={onClose}
+            aria-label="닫기"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
-        <div className="settings-field">
-          <label className="settings-label" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>카테고리</label>
-          {loading ? (
-            <div style={{ fontSize: '14px' }}>로딩 중...</div>
-          ) : (
-            <select
-              className="input"
-              value={categoryId}
-              onChange={e => setCategoryId(e.target.value)}
-              style={{ width: '100%', boxSizing: 'border-box', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-            >
-              <option value="">(선택 안함)</option>
-              {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-          )}
+        <div className="task-settings-modal-body">
+          <div className="task-settings-field">
+            <label className="form-label">작업 이름</label>
+            <input
+              className="form-input"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div className="task-settings-field">
+            <label className="form-label">카테고리</label>
+            {loading ? (
+              <div className="task-settings-loading">로딩 중...</div>
+            ) : (
+              <select
+                className="form-input"
+                value={categoryId}
+                onChange={e => setCategoryId(e.target.value)}
+              >
+                <option value="">(선택 안함)</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <label className="task-settings-checkbox-row" htmlFor="lowPriorityCheck">
+            <input
+              type="checkbox"
+              id="lowPriorityCheck"
+              checked={lowPriority}
+              onChange={e => setLowPriority(e.target.checked)}
+            />
+            <span>낮은 우선순위</span>
+          </label>
         </div>
 
-        <div className="settings-field" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input
-            type="checkbox"
-            id="lowPriorityCheck"
-            checked={lowPriority}
-            onChange={e => setLowPriority(e.target.checked)}
-            style={{ width: '16px', height: '16px' }}
-          />
-          <label htmlFor="lowPriorityCheck" style={{ fontSize: '14px', cursor: 'pointer' }}>낮은 우선순위</label>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+        <div className="task-settings-modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>취소</button>
           <button className="btn btn-primary" onClick={handleSave}>저장</button>
         </div>
