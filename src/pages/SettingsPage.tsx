@@ -9,6 +9,14 @@ import {
   getLastSyncLabel,
   getLastSyncTime,
 } from '../lib/syncManager';
+import {
+  ensurePermission,
+  hasPermission,
+  getNotificationSettings,
+  setNotificationSettings,
+  rescheduleAll,
+  type NotificationSettings,
+} from '../lib/notifications';
 import type { ProxySettings } from '../types';
 import CategoryManager from '../components/settings/CategoryManager';
 import './Pages.css';
@@ -27,6 +35,11 @@ export default function SettingsPage() {
   // 동기화 설정
   const [syncInterval, setSyncIntervalState] = useState<number>(0);
   const [lastSyncLabel, setLastSyncLabel] = useState<string>('');
+
+  // 알림 설정
+  const [notifSettings, setNotifSettings] = useState<NotificationSettings | null>(null);
+  const [notifPermission, setNotifPermission] = useState<boolean>(false);
+  const [notifBusy, setNotifBusy] = useState<boolean>(false);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -51,6 +64,37 @@ export default function SettingsPage() {
   const handleSyncIntervalChange = (value: number) => {
     setSyncIntervalState(value);
     updateAutoSync(value);
+  };
+
+  // 알림 설정/권한 로드
+  useEffect(() => {
+    void (async () => {
+      const [s, granted] = await Promise.all([getNotificationSettings(), hasPermission()]);
+      setNotifSettings(s);
+      setNotifPermission(granted);
+    })();
+  }, []);
+
+  const updateNotif = async (patch: Partial<NotificationSettings>) => {
+    setNotifBusy(true);
+    try {
+      const next = await setNotificationSettings(patch);
+      setNotifSettings(next);
+      await rescheduleAll();
+    } finally {
+      setNotifBusy(false);
+    }
+  };
+
+  const handleRequestNotifPermission = async () => {
+    setNotifBusy(true);
+    try {
+      const granted = await ensurePermission();
+      setNotifPermission(granted);
+      if (granted) await rescheduleAll();
+    } finally {
+      setNotifBusy(false);
+    }
   };
 
   // Load settings
@@ -277,6 +321,90 @@ export default function SettingsPage() {
             카테고리 관리
           </h3>
           <CategoryManager />
+        </section>
+
+        {/* Notifications */}
+        <section className="settings-section card">
+          <h3 className="settings-section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 01-3.46 0" />
+            </svg>
+            알림
+          </h3>
+
+          <div className="settings-field settings-field-row" style={{ marginBottom: '0.75rem' }}>
+            <label className="settings-label">권한 상태</label>
+            <span className="settings-value" style={{ fontSize: '0.85rem' }}>
+              {notifPermission ? '✅ 허용됨' : '❌ 미허용'}
+            </span>
+          </div>
+
+          {!notifPermission && (
+            <div className="settings-field" style={{ marginBottom: '0.75rem' }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleRequestNotifPermission}
+                disabled={notifBusy}
+                type="button"
+              >
+                알림 권한 요청
+              </button>
+              <p className="settings-description" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+                권한이 거부된 경우 OS 설정에서 직접 허용해야 합니다.
+              </p>
+            </div>
+          )}
+
+          {notifSettings && (
+            <>
+              <div className="settings-field settings-field-row">
+                <label className="settings-label">오늘의 할일 요약 알림</label>
+                <button
+                  type="button"
+                  className={`toggle ${notifSettings.dailySummaryEnabled ? 'active' : ''}`}
+                  onClick={() => updateNotif({ dailySummaryEnabled: !notifSettings.dailySummaryEnabled })}
+                  disabled={notifBusy || !notifPermission}
+                />
+              </div>
+
+              {notifSettings.dailySummaryEnabled && (
+                <div className="settings-field" style={{ marginTop: '0.5rem', marginBottom: '0.75rem' }}>
+                  <label className="settings-label" style={{ marginBottom: '0.25rem', display: 'block' }}>
+                    알림 시각
+                  </label>
+                  <input
+                    type="time"
+                    className="input"
+                    value={notifSettings.dailySummaryTime}
+                    disabled={notifBusy || !notifPermission}
+                    onChange={(e) => updateNotif({ dailySummaryTime: e.target.value })}
+                    style={{ maxWidth: '160px' }}
+                  />
+                  <p className="settings-description" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+                    매일 이 시각에 오늘의 할일과 일정을 요약해서 알려드립니다.
+                  </p>
+                </div>
+              )}
+
+              <div className="settings-field settings-field-row" style={{ marginTop: '0.75rem' }}>
+                <label className="settings-label">개별 일정 알림</label>
+                <button
+                  type="button"
+                  className={`toggle ${notifSettings.perScheduleEnabled ? 'active' : ''}`}
+                  onClick={() => updateNotif({ perScheduleEnabled: !notifSettings.perScheduleEnabled })}
+                  disabled={notifBusy || !notifPermission}
+                />
+              </div>
+              <p className="settings-description" style={{ marginTop: '0.25rem', marginBottom: 0 }}>
+                각 일정에 설정한 알림 시각에 푸시 알림을 표시합니다. 이 항목을 끄면 모든 개별 일정 알림이 취소됩니다.
+              </p>
+
+              <p className="settings-description" style={{ marginTop: '0.75rem', marginBottom: 0, fontSize: '0.78rem', opacity: 0.75 }}>
+                알림 설정은 기기에 저장되며 기기마다 별도로 관리됩니다.
+              </p>
+            </>
+          )}
         </section>
 
         {/* Sync */}

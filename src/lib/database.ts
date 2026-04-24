@@ -4,6 +4,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
 import { getTodayString } from '../utils/dateUtils';
+import {
+  refreshScheduleNotification,
+  cancelScheduleNotification,
+  rescheduleDailySummariesOnly,
+} from './notifications';
 import type {
   Task, Category, CalendarCellData,
   CreateTaskInput, UpdateTaskInput, TaskStatusSummary,
@@ -154,6 +159,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
     if (error) throw error;
   });
 
+  void rescheduleDailySummariesOnly().catch(console.error);
   return newTask;
 }
 
@@ -169,6 +175,8 @@ export async function updateTask(id: string, updates: UpdateTaskInput): Promise<
       .eq('id', id);
     if (error) throw error;
   });
+
+  void rescheduleDailySummariesOnly().catch(console.error);
 }
 
 export async function deleteTask(id: string): Promise<void> {
@@ -183,6 +191,8 @@ export async function deleteTask(id: string): Promise<void> {
       .eq('id', id);
     if (error) throw error;
   });
+
+  void rescheduleDailySummariesOnly().catch(console.error);
 }
 
 
@@ -559,6 +569,8 @@ export async function createSchedule(input: CreateScheduleInput): Promise<Schedu
 
     if (error) throw error;
     await clearAllCaches();
+    void refreshScheduleNotification(data as Schedule).catch(console.error);
+    void rescheduleDailySummariesOnly().catch(console.error);
     return data;
   });
 }
@@ -574,6 +586,8 @@ export async function updateSchedule(id: string, input: UpdateScheduleInput): Pr
 
     if (error) throw error;
     await clearAllCaches();
+    void refreshScheduleNotification(data as Schedule).catch(console.error);
+    void rescheduleDailySummariesOnly().catch(console.error);
     return data;
   });
 }
@@ -587,6 +601,8 @@ export async function deleteSchedule(id: string): Promise<void> {
 
     if (error) throw error;
     await clearAllCaches();
+    void cancelScheduleNotification(id).catch(console.error);
+    void rescheduleDailySummariesOnly().catch(console.error);
   });
 }
 

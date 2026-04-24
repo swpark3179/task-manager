@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { taskCache, calendarCache, categoryCache, scheduleCache, clearAllCaches } from './cache';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { getTodayString } from '../utils/dateUtils';
+import { rescheduleAll } from './notifications';
 import type { Task, CalendarCellData, TaskStatusSummary } from '../types';
 
 // =============================================
@@ -196,6 +197,11 @@ export async function performFullSync(): Promise<void> {
 
     setLastSyncTime();
     setSyncStatus('synced');
+
+    // 동기화 완료 후 로컬 알림 재예약 (백그라운드)
+    void rescheduleAll().catch((err) => {
+      console.error('[SyncManager] reschedule notifications failed:', err);
+    });
   } catch (err) {
     console.error('[SyncManager] Full sync failed:', err);
     setSyncStatus('error');

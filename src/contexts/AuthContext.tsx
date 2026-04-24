@@ -3,6 +3,7 @@ import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { clearAllCaches } from '../lib/cache';
 import { syncIfNeeded, startAutoSync, stopAutoSync, performFullSync } from '../lib/syncManager';
+import { rescheduleAll } from '../lib/notifications';
 
 // =============================================
 // Authentication Context
@@ -35,6 +36,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.user) {
         void syncIfNeeded().catch(console.error);
         startAutoSync();
+        // 동기화가 스킵되어도 알림 예약은 갱신 (권한 없으면 조용히 종료)
+        void rescheduleAll().catch(console.error);
       }
     });
 
@@ -54,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (!error) {
       // 로그인 성공: 비동기 전체 동기화 (UI는 SyncBlocker가 입력 차단)
+      // performFullSync 내부에서 rescheduleAll이 호출됨
       void performFullSync().catch(console.error);
       startAutoSync();
     }

@@ -23,6 +23,12 @@ export interface Schedule {
   start_date: string;
   end_date: string;
   estimated_time: string | null;
+  // 단일 일정(start_date == end_date)일 때만 사용. 'HH:MM' or 'HH:MM:SS'.
+  scheduled_time: string | null;
+  // 알림이 발화될 절대 시각(ISO timestamp, UTC). null이면 알림 미설정.
+  notify_at: string | null;
+  // "예정 시각 N분 전" 모드일 때 표시용. null이면 절대 시각 모드.
+  notify_offset_minutes: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -119,6 +125,9 @@ export interface CreateScheduleInput {
   start_date: string;
   end_date: string;
   estimated_time?: string | null;
+  scheduled_time?: string | null;
+  notify_at?: string | null;
+  notify_offset_minutes?: number | null;
 }
 
 export interface UpdateScheduleInput {
@@ -128,4 +137,7 @@ export interface UpdateScheduleInput {
   start_date?: string;
   end_date?: string;
   estimated_time?: string | null;
+  scheduled_time?: string | null;
+  notify_at?: string | null;
+  notify_offset_minutes?: number | null;
 }

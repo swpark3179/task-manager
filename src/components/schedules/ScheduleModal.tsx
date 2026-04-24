@@ -1,6 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import MDEditor from '@uiw/react-md-editor';
 import { createSchedule, updateSchedule, deleteSchedule, fetchCategories } from '../../lib/database';
+import {
+  computeNotifyAtFromOffset,
+  isoToLocalDateTimeValue,
+  localDateTimeToIso,
+} from '../../lib/notifications';
 import type { Schedule, Category } from '../../types';
 
 interface ScheduleModalProps {
@@ -11,16 +16,54 @@ interface ScheduleModalProps {
   onSave: () => void;
 }
 
+type NotifyMode = 'absolute' | 'offset';
+
+const OFFSET_OPTIONS: { value: number; label: string }[] = [
+  { value: 5, label: '5분 전' },
+  { value: 10, label: '10분 전' },
+  { value: 15, label: '15분 전' },
+  { value: 30, label: '30분 전' },
+  { value: 60, label: '1시간 전' },
+  { value: 120, label: '2시간 전' },
+];
+
+function defaultNotifyAtForDate(date: string): string {
+  const d = new Date(date);
+  d.setHours(9, 0, 0, 0);
+  return isoToLocalDateTimeValue(d.toISOString());
+}
+
+function normalizeTime(hhmmOrHHmmss: string | null): string {
+  if (!hhmmOrHHmmss) return '';
+  const parts = hhmmOrHHmmss.split(':');
+  if (parts.length < 2) return '';
+  return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+}
+
 export default function ScheduleModal({ startDate: initialStartDate, endDate: initialEndDate, schedule, onClose, onSave }: ScheduleModalProps) {
   const [startDate, setStartDate] = useState(initialStartDate);
   const [endDate, setEndDate] = useState(initialEndDate);
   const [title, setTitle] = useState(schedule?.title || '');
   const [description, setDescription] = useState(schedule?.description || '');
-  const [estimatedTime, setEstimatedTime] = useState(schedule?.estimated_time || '');
   const [categoryId, setCategoryId] = useState<string>(schedule?.category_id || '');
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 예정 시간(단일 일정 전용)
+  const initialScheduledTime = normalizeTime(schedule?.scheduled_time ?? null);
+  const [scheduledTimeEnabled, setScheduledTimeEnabled] = useState<boolean>(!!initialScheduledTime);
+  const [scheduledTime, setScheduledTime] = useState<string>(initialScheduledTime);
+
+  // 알림 설정
+  const initialNotifyEnabled = !!schedule?.notify_at;
+  const initialNotifyMode: NotifyMode = schedule?.notify_offset_minutes != null ? 'offset' : 'absolute';
+  const [notifyEnabled, setNotifyEnabled] = useState<boolean>(initialNotifyEnabled);
+  const [notifyMode, setNotifyMode] = useState<NotifyMode>(initialNotifyMode);
+  const [notifyAtLocal, setNotifyAtLocal] = useState<string>(
+    schedule?.notify_at ? isoToLocalDateTimeValue(schedule.notify_at) : defaultNotifyAtForDate(initialStartDate)
+  );
+  const [notifyOffset, setNotifyOffset] = useState<number>(schedule?.notify_offset_minutes ?? 10);
 
   const isSameDay = startDate === endDate;
 
@@ -34,10 +77,44 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
       setEndDate(schedule.end_date);
       setTitle(schedule.title);
       setDescription(schedule.description || '');
-      setEstimatedTime(schedule.estimated_time || '');
       setCategoryId(schedule.category_id || '');
+      const t = normalizeTime(schedule.scheduled_time ?? null);
+      setScheduledTimeEnabled(!!t);
+      setScheduledTime(t);
+      setNotifyEnabled(!!schedule.notify_at);
+      setNotifyMode(schedule.notify_offset_minutes != null ? 'offset' : 'absolute');
+      if (schedule.notify_at) setNotifyAtLocal(isoToLocalDateTimeValue(schedule.notify_at));
+      if (schedule.notify_offset_minutes != null) setNotifyOffset(schedule.notify_offset_minutes);
     }
   }, [schedule]);
+
+  // 다중일 일정으로 바뀌면 예정 시간/오프셋 모드는 무효화
+  useEffect(() => {
+    if (!isSameDay) {
+      if (scheduledTimeEnabled) setScheduledTimeEnabled(false);
+      if (notifyMode === 'offset') setNotifyMode('absolute');
+    }
+  }, [isSameDay, scheduledTimeEnabled, notifyMode]);
+
+  // 예정시간이 꺼지면 N분 전 모드 사용 불가 → 절대 시각 모드로 전환
+  useEffect(() => {
+    if (!scheduledTimeEnabled && notifyMode === 'offset') setNotifyMode('absolute');
+  }, [scheduledTimeEnabled, notifyMode]);
+
+  const computedNotifyAtIso = useMemo<string | null>(() => {
+    if (!notifyEnabled) return null;
+    if (notifyMode === 'absolute') {
+      if (!notifyAtLocal) return null;
+      return localDateTimeToIso(notifyAtLocal);
+    }
+    if (!isSameDay || !scheduledTimeEnabled || !scheduledTime) return null;
+    return computeNotifyAtFromOffset(startDate, scheduledTime, notifyOffset);
+  }, [notifyEnabled, notifyMode, notifyAtLocal, isSameDay, scheduledTimeEnabled, scheduledTime, notifyOffset, startDate]);
+
+  const notifyIsPast = useMemo(() => {
+    if (!computedNotifyAtIso) return false;
+    return new Date(computedNotifyAtIso).getTime() <= Date.now();
+  }, [computedNotifyAtIso]);
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -56,9 +133,17 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
       setError('종료일은 시작일과 같거나 이후여야 합니다.');
       return;
     }
+    if (notifyEnabled && notifyMode === 'offset' && (!isSameDay || !scheduledTimeEnabled || !scheduledTime)) {
+      setError('"N분 전" 알림은 단일 일정 + 예정 시간이 설정된 경우에만 사용할 수 있습니다.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
+
+    const finalScheduledTime = isSameDay && scheduledTimeEnabled && scheduledTime ? `${scheduledTime}:00` : null;
+    const finalNotifyAt = notifyEnabled ? computedNotifyAtIso : null;
+    const finalNotifyOffset = notifyEnabled && notifyMode === 'offset' ? notifyOffset : null;
 
     try {
       if (schedule) {
@@ -68,7 +153,10 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
           description: description || null,
           start_date: startDate,
           end_date: endDate,
-          estimated_time: isSameDay && estimatedTime.trim() ? estimatedTime.trim() : null,
+          estimated_time: null,
+          scheduled_time: finalScheduledTime,
+          notify_at: finalNotifyAt,
+          notify_offset_minutes: finalNotifyOffset,
         });
       } else {
         await createSchedule({
@@ -77,7 +165,10 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
           description: description || null,
           start_date: startDate,
           end_date: endDate,
-          estimated_time: isSameDay && estimatedTime.trim() ? estimatedTime.trim() : null,
+          estimated_time: null,
+          scheduled_time: finalScheduledTime,
+          notify_at: finalNotifyAt,
+          notify_offset_minutes: finalNotifyOffset,
         });
       }
       onSave();
@@ -156,14 +247,23 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
 
           {isSameDay && (
             <div className="schedule-modal-field">
-              <label className="form-label">예정 시간 (선택)</label>
-              <input
-                type="text"
-                className="form-input"
-                value={estimatedTime}
-                onChange={e => setEstimatedTime(e.target.value)}
-                placeholder="예: 14:00 또는 2시간"
-              />
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={scheduledTimeEnabled}
+                  onChange={e => setScheduledTimeEnabled(e.target.checked)}
+                />
+                예정 시간
+              </label>
+              {scheduledTimeEnabled && (
+                <input
+                  type="time"
+                  className="form-input"
+                  value={scheduledTime}
+                  onChange={e => setScheduledTime(e.target.value)}
+                  style={{ marginTop: 6 }}
+                />
+              )}
             </div>
           )}
 
@@ -192,6 +292,73 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
                 <option key={cat.id} value={cat.id}>{cat.name}</option>
               ))}
             </select>
+          </div>
+
+          {/* 알림 */}
+          <div className="schedule-modal-field">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={notifyEnabled}
+                onChange={e => setNotifyEnabled(e.target.checked)}
+              />
+              알림 설정
+            </label>
+            {notifyEnabled && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem' }}>
+                    <input
+                      type="radio"
+                      name="notify-mode"
+                      checked={notifyMode === 'absolute'}
+                      onChange={() => setNotifyMode('absolute')}
+                    />
+                    특정 시각
+                  </label>
+                  <label
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.9rem',
+                      opacity: isSameDay && scheduledTimeEnabled && scheduledTime ? 1 : 0.5,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="notify-mode"
+                      checked={notifyMode === 'offset'}
+                      disabled={!isSameDay || !scheduledTimeEnabled || !scheduledTime}
+                      onChange={() => setNotifyMode('offset')}
+                    />
+                    예정 시간 N분 전
+                  </label>
+                </div>
+
+                {notifyMode === 'absolute' ? (
+                  <input
+                    type="datetime-local"
+                    className="form-input"
+                    value={notifyAtLocal}
+                    onChange={e => setNotifyAtLocal(e.target.value)}
+                  />
+                ) : (
+                  <select
+                    className="form-input"
+                    value={notifyOffset}
+                    onChange={e => setNotifyOffset(parseInt(e.target.value, 10))}
+                  >
+                    {OFFSET_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                )}
+
+                {notifyIsPast && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--accent-warning, #c98300)' }}>
+                    선택한 알림 시각이 이미 지났습니다. 저장은 가능하지만 알림은 표시되지 않습니다.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="schedule-modal-field" data-color-mode="light">
