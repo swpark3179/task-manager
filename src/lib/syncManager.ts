@@ -143,18 +143,32 @@ export async function performFullSync(): Promise<void> {
         extraTasks = pastTasks || [];
       }
 
+      // 조회를 최적화하기 위해 Map 구축 (tasks가 extraTasks보다 우선순위를 가짐)
+      const allTasksMap = new Map<string, Task>();
+      extraTasks.forEach((t) => allTasksMap.set(t.id, t));
+      (tasks || []).forEach((t) => allTasksMap.set(t.id, t));
+
+      // 각 날짜별 버킷의 ID를 추적하기 위한 Set 맵 구축
+      const bucketIdsByDate = new Map<string, Set<string>>();
+      for (const [date, bucket] of tasksByDate.entries()) {
+        bucketIdsByDate.set(date, new Set(bucket.map((t) => t.id)));
+      }
+
       // 스냅샷 날짜에도 해당 태스크를 캐시에 추가 (is_snapshot 플래그)
       for (const snap of snapshots) {
         const date = snap.snapshot_date;
-        if (!tasksByDate.has(date)) tasksByDate.set(date, []);
-        const bucket = tasksByDate.get(date)!;
-        if (!bucket.some((t) => t.id === snap.task_id)) {
+        if (!tasksByDate.has(date)) {
+          tasksByDate.set(date, []);
+          bucketIdsByDate.set(date, new Set());
+        }
+
+        const bucketIds = bucketIdsByDate.get(date)!;
+        if (!bucketIds.has(snap.task_id)) {
           // 원본 태스크 찾기
-          const original =
-            (tasks || []).find((t) => t.id === snap.task_id) ||
-            extraTasks.find((t) => t.id === snap.task_id);
+          const original = allTasksMap.get(snap.task_id);
           if (original) {
-            bucket.push({ ...original, is_snapshot: true } as Task);
+            tasksByDate.get(date)!.push({ ...original, is_snapshot: true } as Task);
+            bucketIds.add(snap.task_id);
           }
         }
       }
@@ -237,6 +251,7 @@ async function buildAndCacheCalendarData(
     const mEnd = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
     const dateMap = new Map<string, CalendarCellData>();
+    const taskIdsByDate = new Map<string, Set<string>>();
 
     // 스냅샷 처리
     for (const snap of snapshots) {
@@ -244,6 +259,7 @@ async function buildAndCacheCalendarData(
       const date = snap.snapshot_date;
       if (!dateMap.has(date)) {
         dateMap.set(date, { date, tasks: [], schedules: [], summary: emptySummary() });
+        taskIdsByDate.set(date, new Set());
       }
       dateMap.get(date)!.tasks.push({
         ...snap,
@@ -252,6 +268,7 @@ async function buildAndCacheCalendarData(
         parent_id: (snap as any).tasks?.parent_id || null,
         is_snapshot: true,
       });
+      taskIdsByDate.get(date)!.add(snap.task_id);
     }
 
     // 현재 태스크 처리
@@ -260,9 +277,11 @@ async function buildAndCacheCalendarData(
       if (date < mStart || date > mEnd) continue;
       if (!dateMap.has(date)) {
         dateMap.set(date, { date, tasks: [], schedules: [], summary: emptySummary() });
+        taskIdsByDate.set(date, new Set());
       }
       const cell = dateMap.get(date)!;
-      if (!cell.tasks.some((t) => t.task_id === task.id)) {
+      const taskIds = taskIdsByDate.get(date)!;
+      if (!taskIds.has(task.id)) {
         cell.tasks.push({
           id: task.id,
           user_id: userId,
@@ -274,6 +293,7 @@ async function buildAndCacheCalendarData(
           category_id: task.category_id,
           parent_id: task.parent_id,
         });
+        taskIds.add(task.id);
       }
     }
 
