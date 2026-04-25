@@ -148,6 +148,34 @@
   .task-item-actions {
     opacity: 1;
   }
+
+  .task-list-summary {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .task-list-summary .view-mode-toggle {
+    order: 2;
+    margin-left: auto;
+    margin-right: 0 !important;
+  }
+
+  .task-list-summary .progress-bar {
+    order: 3;
+    width: 100% !important;
+    flex-basis: 100%;
+  }
+
+  .task-item-main {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .task-tree-nested {
+    margin-left: 14px;
+    padding-left: 8px;
+  }
 }
 
 .task-item-delete:hover {

@@ -66,7 +66,6 @@ export default function TaskSettingsModal({ task, onClose, onUpdate }: TaskSetti
               className="form-input"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              autoFocus
             />
           </div>
 

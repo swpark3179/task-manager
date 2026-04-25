@@ -40,6 +40,10 @@ function normalizeTime(hhmmOrHHmmss: string | null): string {
   return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export default function ScheduleModal({ startDate: initialStartDate, endDate: initialEndDate, schedule, onClose, onSave }: ScheduleModalProps) {
   const [startDate, setStartDate] = useState(initialStartDate);
   const [endDate, setEndDate] = useState(initialEndDate);
@@ -172,8 +176,8 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
         });
       }
       onSave();
-    } catch (err: any) {
-      setError(err.message || '일정 저장에 실패했습니다.');
+    } catch (err) {
+      setError(getErrorMessage(err, '일정 저장에 실패했습니다.'));
     } finally {
       setLoading(false);
     }
@@ -185,8 +189,8 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
     try {
       await deleteSchedule(schedule.id);
       onSave();
-    } catch (err: any) {
-      setError(err.message || '일정 삭제에 실패했습니다.');
+    } catch (err) {
+      setError(getErrorMessage(err, '일정 삭제에 실패했습니다.'));
       setLoading(false);
     }
   };
@@ -276,7 +280,6 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
               required
               onChange={e => setTitle(e.target.value)}
               placeholder="일정 제목을 입력하세요"
-              autoFocus
             />
           </div>
 

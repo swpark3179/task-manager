@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import TaskList from '../components/tasks/TaskList';
 import { useNavigate } from 'react-router-dom';
 import { useSwipe } from '../hooks/useSwipe';
@@ -13,6 +13,7 @@ import { getTodayString, formatDateDisplay, getPrevDay, getNextDay } from '../ut
 import type { Task, Schedule } from '../types';
 import ScheduleSection from '../components/schedules/ScheduleSection';
 import ScheduleModal from '../components/schedules/ScheduleModal';
+import { useSyncStatus } from '../components/common/SyncIndicator';
 import './Pages.css';
 
 export default function TodayPage() {
@@ -29,6 +30,8 @@ export default function TodayPage() {
   const [loading, setLoading] = useState(true);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const syncStatus = useSyncStatus();
+  const previousSyncStatusRef = useRef(syncStatus);
 
   const loadTasks = useCallback(async () => {
     try {
@@ -75,6 +78,15 @@ export default function TodayPage() {
 
     init();
   }, [loadTasks, loadSchedules, today]);
+
+  useEffect(() => {
+    const previousStatus = previousSyncStatusRef.current;
+    previousSyncStatusRef.current = syncStatus;
+
+    if (previousStatus === 'syncing' && syncStatus === 'synced') {
+      void Promise.all([loadTasks(), loadSchedules()]);
+    }
+  }, [loadTasks, loadSchedules, syncStatus]);
 
   const handleAddTask = async (title: string) => {
     try {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSwipe } from '../hooks/useSwipe';
 import TaskList from '../components/tasks/TaskList';
@@ -7,6 +7,7 @@ import {
   completeTask, uncompleteTask, discardTask, undiscardTask, createTask
 } from '../lib/database';
 import { formatDateFull, getNextDay, getPrevDay, getTodayString } from '../utils/dateUtils';
+import { useSyncStatus } from '../components/common/SyncIndicator';
 import type { Task } from '../types';
 import './Pages.css';
 
@@ -17,6 +18,8 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const today = getTodayString();
   const viewDate = date || today;
+  const syncStatus = useSyncStatus();
+  const previousSyncStatusRef = useRef(syncStatus);
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
@@ -38,6 +41,15 @@ export default function HistoryPage() {
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
+
+  useEffect(() => {
+    const previousStatus = previousSyncStatusRef.current;
+    previousSyncStatusRef.current = syncStatus;
+
+    if (previousStatus === 'syncing' && syncStatus === 'synced') {
+      void loadTasks();
+    }
+  }, [loadTasks, syncStatus]);
 
   const goToDate = (newDate: string) => {
     if (newDate === today) {

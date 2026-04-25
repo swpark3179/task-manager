@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSwipe } from '../hooks/useSwipe';
 import { useRubberBandScroll } from '../hooks/useRubberBandScroll';
@@ -21,6 +21,7 @@ import TaskTree from "../components/tasks/TaskTree";
 import ScheduleModal from "../components/schedules/ScheduleModal";
 import ScheduleSection from "../components/schedules/ScheduleSection";
 import type { Task } from "../types";
+import { useSyncStatus } from "../components/common/SyncIndicator";
 
 import "./Pages.css";
 
@@ -46,6 +47,7 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [viewMode, setViewMode] = useState<"tree" | "leaf">("tree");
+  const syncStatus = useSyncStatus();
 
   // Drag selection state
   const [isDragging, setIsDragging] = useState(false);
@@ -59,6 +61,7 @@ export default function CalendarPage() {
   const isLongPressTriggeredRef = useRef(false);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const calendarGridRef = useRef<HTMLDivElement>(null);
+  const previousSyncStatusRef = useRef(syncStatus);
 
   // 월 전환 슬라이드 애니메이션
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
@@ -78,27 +81,37 @@ export default function CalendarPage() {
     return cat?.color || undefined;
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const data = await fetchCalendarData(year, month, (fresh) => {
-          // Stale-while-revalidate: update once the background refresh resolves
-          if (!cancelled) setCalendarData(fresh);
-        });
-        if (!cancelled) setCalendarData(data);
-      } catch (err) {
-        console.error("Failed to load calendar data:", err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
+  const loadCalendarData = useCallback(async (cancelledRef?: { current: boolean }) => {
+    setLoading(true);
+    try {
+      const data = await fetchCalendarData(year, month, (fresh) => {
+        // Stale-while-revalidate: update once the background refresh resolves
+        if (!cancelledRef?.current) setCalendarData(fresh);
+      });
+      if (!cancelledRef?.current) setCalendarData(data);
+    } catch (err) {
+      console.error("Failed to load calendar data:", err);
+    } finally {
+      if (!cancelledRef?.current) setLoading(false);
+    }
   }, [year, month]);
+
+  useEffect(() => {
+    const cancelledRef = { current: false };
+    void loadCalendarData(cancelledRef);
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, [loadCalendarData]);
+
+  useEffect(() => {
+    const previousStatus = previousSyncStatusRef.current;
+    previousSyncStatusRef.current = syncStatus;
+
+    if (previousStatus === 'syncing' && syncStatus === 'synced') {
+      void loadCalendarData();
+    }
+  }, [loadCalendarData, syncStatus]);
   // Lock body scroll and swipe when dragging in mobile
   useEffect(() => {
     if (isDragging && isLongPressTriggeredRef.current) {
@@ -547,12 +560,12 @@ export default function CalendarPage() {
                       const showTitle = bar.isActualStart || bar.startCol === 0;
                       const catColor = getCategoryColor(bar.schedule.category_id);
                       const fallbackDate = bar.schedule.start_date.split('T')[0];
-                      const resolveDateFromX = (clientX: number): string => {
+                      const resolveDateFromPoint = (clientX: number, clientY: number): string => {
                         if (calendarGridRef.current) {
                           const cells = calendarGridRef.current.querySelectorAll('.calendar-cell[data-date]');
                           for (const cell of Array.from(cells)) {
                             const r = cell.getBoundingClientRect();
-                            if (clientX >= r.left && clientX <= r.right) {
+                            if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
                               const d = cell.getAttribute('data-date');
                               if (d) return d;
                             }
@@ -571,7 +584,7 @@ export default function CalendarPage() {
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleCellClick(resolveDateFromX(e.clientX));
+                            handleCellClick(resolveDateFromPoint(e.clientX, e.clientY));
                           }}
                           onMouseDown={(e) => e.stopPropagation()}
                           onTouchStart={(e) => e.stopPropagation()}
