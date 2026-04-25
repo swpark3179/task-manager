@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { Task, Category } from '../../../types';
 import { fetchCategories } from '../../../lib/database';
 
@@ -38,7 +39,7 @@ export default function TaskSettingsModal({ task, onClose, onUpdate }: TaskSetti
     onClose();
   };
 
-  return (
+  return createPortal(
     <div className="modal-overlay task-settings-modal-overlay" onClick={onClose}>
       <div
         className="modal-content task-settings-modal"
@@ -103,6 +104,7 @@ export default function TaskSettingsModal({ task, onClose, onUpdate }: TaskSetti
           <button className="btn btn-primary" onClick={handleSave}>저장</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

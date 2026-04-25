@@ -37,6 +37,17 @@ type ScheduleBar = {
   isActualEnd: boolean;
 };
 
+type ScheduleModalRange = {
+  start: string;
+  end: string;
+};
+
+const DAY_MODAL_CLOSE_DRAG_THRESHOLD = 120;
+
+function normalizeDateRange(start: string, end: string): ScheduleModalRange {
+  return start <= end ? { start, end } : { start: end, end: start };
+}
+
 export default function CalendarPage() {
   const navigate = useNavigate();
   const today = getTodayString();
@@ -54,12 +65,18 @@ export default function CalendarPage() {
   const [dragStart, setDragStart] = useState<string | null>(null);
   const [dragEnd, setDragEnd] = useState<string | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleModalRange, setScheduleModalRange] = useState<ScheduleModalRange | null>(null);
   const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
+  const [dayModalDragOffset, setDayModalDragOffset] = useState(0);
+  const [isDayModalDragging, setIsDayModalDragging] = useState(false);
 
   // Touch and Long Press state
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressTriggeredRef = useRef(false);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const dayModalDragStartYRef = useRef<number | null>(null);
+  const dayModalDragOffsetRef = useRef(0);
+  const suppressDayModalTitleClickRef = useRef(false);
   const calendarGridRef = useRef<HTMLDivElement>(null);
   const previousSyncStatusRef = useRef(syncStatus);
 
@@ -266,7 +283,10 @@ export default function CalendarPage() {
         } else {
           // It's a drag, open schedule modal
           setSelectedSchedule(null);
+          setScheduleModalRange(normalizeDateRange(dragStart, dragEnd));
           setShowScheduleModal(true);
+          setDragStart(null);
+          setDragEnd(null);
         }
       }
     }
@@ -357,12 +377,17 @@ export default function CalendarPage() {
 
       if (dragStart && dragEnd && dragStart !== dragEnd) {
         setSelectedSchedule(null);
+        setScheduleModalRange(normalizeDateRange(dragStart, dragEnd));
         setShowScheduleModal(true);
-      } else if (dragStart === dragEnd) {
+      } else if (dragStart && dragStart === dragEnd) {
         // Just long pressed on a single cell, maybe open schedule modal too
         setSelectedSchedule(null);
+        setScheduleModalRange(normalizeDateRange(dragStart, dragStart));
         setShowScheduleModal(true);
       }
+
+      setDragStart(null);
+      setDragEnd(null);
 
       // Prevent the click event that might follow
       if (e.cancelable) e.preventDefault();
@@ -384,10 +409,50 @@ export default function CalendarPage() {
 
   const openScheduleBar = (schedule: Schedule) => {
     setSelectedSchedule(schedule);
-    setDragStart(schedule.start_date);
-    setDragEnd(schedule.end_date);
+    setScheduleModalRange(normalizeDateRange(schedule.start_date, schedule.end_date));
+    setDragStart(null);
+    setDragEnd(null);
     setIsDragging(false);
     setShowScheduleModal(true);
+  };
+
+  const closeDayModal = () => {
+    setSelectedDate(null);
+    setViewMode("tree");
+    dayModalDragOffsetRef.current = 0;
+    setDayModalDragOffset(0);
+    setIsDayModalDragging(false);
+    dayModalDragStartYRef.current = null;
+    suppressDayModalTitleClickRef.current = false;
+  };
+
+  const handleDayModalHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    dayModalDragStartYRef.current = e.clientY;
+    dayModalDragOffsetRef.current = 0;
+    suppressDayModalTitleClickRef.current = false;
+    setIsDayModalDragging(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleDayModalHeaderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (dayModalDragStartYRef.current === null) return;
+    const offset = Math.max(0, e.clientY - dayModalDragStartYRef.current);
+    if (offset > 6) suppressDayModalTitleClickRef.current = true;
+    dayModalDragOffsetRef.current = offset;
+    setDayModalDragOffset(offset);
+  };
+
+  const finishDayModalHeaderDrag = () => {
+    if (dayModalDragStartYRef.current === null) return;
+    const shouldClose = dayModalDragOffsetRef.current >= DAY_MODAL_CLOSE_DRAG_THRESHOLD;
+    dayModalDragStartYRef.current = null;
+    dayModalDragOffsetRef.current = 0;
+    setIsDayModalDragging(false);
+    setDayModalDragOffset(0);
+    if (shouldClose) closeDayModal();
   };
 
   const selectedCellSchedules = useMemo(() => {
@@ -604,13 +669,14 @@ export default function CalendarPage() {
         </div>
 
 
-        {showScheduleModal && dragStart && dragEnd && (
+        {showScheduleModal && scheduleModalRange && (
           <ScheduleModal
-            startDate={dragStart <= dragEnd ? dragStart : dragEnd}
-            endDate={dragStart <= dragEnd ? dragEnd : dragStart}
+            startDate={scheduleModalRange.start}
+            endDate={scheduleModalRange.end}
             schedule={selectedSchedule}
             onClose={() => {
               setShowScheduleModal(false);
+              setScheduleModalRange(null);
               setDragStart(null);
               setDragEnd(null);
               setSelectedSchedule(null);
@@ -619,6 +685,7 @@ export default function CalendarPage() {
               const freshData = await fetchCalendarData(year, month);
               setCalendarData(freshData);
               setShowScheduleModal(false);
+              setScheduleModalRange(null);
               setDragStart(null);
               setDragEnd(null);
               setSelectedSchedule(null);
@@ -633,30 +700,31 @@ export default function CalendarPage() {
         {selectedDate && (
           <div
             className="modal-overlay"
-            onClick={() => {
-              setSelectedDate(null);
-              setViewMode("tree");
-            }}
+            onClick={closeDayModal}
           >
             <div
-              className="modal-content calendar-day-modal"
+              className={`modal-content calendar-day-modal ${isDayModalDragging ? "dragging" : ""}`}
+              style={{ ['--day-modal-drag-offset' as string]: `${dayModalDragOffset}px` }}
               onClick={(e) => {
                 e.stopPropagation();
               }}
             >
               <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  paddingBottom: "8px",
-                  borderBottom: "1px solid var(--border-light)",
-                  marginBottom: "12px",
-                }}
+                className="calendar-day-modal-header"
+                onPointerDown={handleDayModalHeaderPointerDown}
+                onPointerMove={handleDayModalHeaderPointerMove}
+                onPointerUp={finishDayModalHeaderDrag}
+                onPointerCancel={finishDayModalHeaderDrag}
               >
                 <h2
                   style={{ margin: 0, cursor: "pointer", fontSize: "1.05rem" }}
-                  onClick={() => handleNavigate(selectedDate)}
+                  onClick={() => {
+                    if (suppressDayModalTitleClickRef.current) {
+                      suppressDayModalTitleClickRef.current = false;
+                      return;
+                    }
+                    handleNavigate(selectedDate);
+                  }}
                 >
                   {selectedDate === today
                     ? "오늘의 작업"
@@ -732,8 +800,9 @@ export default function CalendarPage() {
                       className="btn btn-primary btn-sm"
                       onClick={() => {
                         setSelectedSchedule(null);
-                        setDragStart(selectedDate);
-                        setDragEnd(selectedDate);
+                        setScheduleModalRange(normalizeDateRange(selectedDate, selectedDate));
+                        setDragStart(null);
+                        setDragEnd(null);
                         setShowScheduleModal(true);
                       }}
                     >

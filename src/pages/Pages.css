@@ -648,8 +648,29 @@
   flex-direction: column;
   width: 92%;
   max-width: 480px;
-  height: 85vh;
-  max-height: 85vh;
+  height: calc(85vh - var(--day-modal-drag-offset, 0px));
+  max-height: calc(85vh - var(--day-modal-drag-offset, 0px));
+}
+
+.calendar-day-modal.dragging {
+  transition: none;
+  user-select: none;
+}
+
+.calendar-day-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 12px;
+  touch-action: none;
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.calendar-day-modal-header:active {
+  cursor: grabbing;
 }
 
 @media (max-width: 767px) {
@@ -661,8 +682,8 @@
   .modal-content.calendar-day-modal {
     width: 100%;
     max-width: 100%;
-    height: 82vh;
-    max-height: 82vh;
+    height: calc(82vh - var(--day-modal-drag-offset, 0px));
+    max-height: calc(82vh - var(--day-modal-drag-offset, 0px));
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     padding: 16px;
     margin-top: auto;
@@ -906,6 +927,7 @@
 .task-settings-modal-overlay {
   z-index: 1200;
   align-items: center;
+  background-color: rgba(0, 0, 0, 0.68);
 }
 
 .modal-content.task-settings-modal {
@@ -917,6 +939,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  opacity: 1;
 }
 
 .task-settings-modal-header {
