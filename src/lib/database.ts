@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { taskCache, calendarCache, categoryCache, updateTaskInAllCaches, removeTaskFromAllCaches, clearAllCaches } from './cache';
+import { taskCache, calendarCache, categoryCache, scheduleCache, updateTaskInAllCaches, removeTaskFromAllCaches, clearAllCaches } from './cache';
 import { v4 as uuidv4 } from 'uuid';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
@@ -556,57 +556,98 @@ export async function forceSync(): Promise<void> {
 // =============================================
 
 export async function createSchedule(input: CreateScheduleInput): Promise<Schedule> {
-  return withSyncStatus(async () => {
-    const userId = await getCurrentUserId();
-    const { data, error } = await supabase
+  const userId = await getCurrentUserId();
+  const id = input.id || uuidv4();
+  const now = new Date().toISOString();
+
+  const newSchedule: Schedule = {
+    id,
+    user_id: userId,
+    ...input,
+    created_at: now,
+    updated_at: now,
+  };
+
+  // Optimistic update
+  const cachedSchedules = (await scheduleCache.get()) || [];
+  await scheduleCache.set([...cachedSchedules, newSchedule]);
+  await calendarCache.invalidate();
+
+  runBackgroundSync(async () => {
+    const { error } = await supabase
       .from('schedules')
       .insert([{
-        user_id: userId,
-        ...input,
-      }])
-      .select()
-      .single();
-
+        id: newSchedule.id,
+        user_id: newSchedule.user_id,
+        title: newSchedule.title,
+        description: newSchedule.description,
+        start_date: newSchedule.start_date,
+        end_date: newSchedule.end_date,
+        notify_at: newSchedule.notify_at,
+      }]);
     if (error) throw error;
-    await clearAllCaches();
-    void refreshScheduleNotification(data as Schedule).catch(console.error);
-    void rescheduleDailySummariesOnly().catch(console.error);
-    return data;
   });
+
+  void refreshScheduleNotification(newSchedule).catch(console.error);
+  void rescheduleDailySummariesOnly().catch(console.error);
+  return newSchedule;
 }
 
 export async function updateSchedule(id: string, input: UpdateScheduleInput): Promise<Schedule> {
-  return withSyncStatus(async () => {
-    const { data, error } = await supabase
+  // Optimistic update
+  const cachedSchedules = (await scheduleCache.get()) || [];
+  const existingIndex = cachedSchedules.findIndex(s => s.id === id);
+  
+  let updatedSchedule: Schedule;
+  if (existingIndex >= 0) {
+    updatedSchedule = { ...cachedSchedules[existingIndex], ...input, updated_at: new Date().toISOString() };
+    cachedSchedules[existingIndex] = updatedSchedule;
+    await scheduleCache.set(cachedSchedules);
+  } else {
+    // If not in cache (should be rare), we still need the updated item for return
+    updatedSchedule = { id, user_id: await getCurrentUserId(), ...input } as Schedule; 
+  }
+  await calendarCache.invalidate();
+
+  runBackgroundSync(async () => {
+    const { error } = await supabase
       .from('schedules')
       .update(input)
-      .eq('id', id)
-      .select()
-      .single();
-
+      .eq('id', id);
     if (error) throw error;
-    await clearAllCaches();
-    void refreshScheduleNotification(data as Schedule).catch(console.error);
-    void rescheduleDailySummariesOnly().catch(console.error);
-    return data;
   });
+
+  void refreshScheduleNotification(updatedSchedule).catch(console.error);
+  void rescheduleDailySummariesOnly().catch(console.error);
+  return updatedSchedule;
 }
 
 export async function deleteSchedule(id: string): Promise<void> {
-  return withSyncStatus(async () => {
+  // Optimistic update
+  const cachedSchedules = (await scheduleCache.get()) || [];
+  await scheduleCache.set(cachedSchedules.filter(s => s.id !== id));
+  await calendarCache.invalidate();
+
+  runBackgroundSync(async () => {
     const { error } = await supabase
       .from('schedules')
       .delete()
       .eq('id', id);
-
     if (error) throw error;
-    await clearAllCaches();
-    void cancelScheduleNotification(id).catch(console.error);
-    void rescheduleDailySummariesOnly().catch(console.error);
   });
+
+  void cancelScheduleNotification(id).catch(console.error);
+  void rescheduleDailySummariesOnly().catch(console.error);
 }
 
 export async function fetchSchedulesForDateRange(startDate: string, endDate: string): Promise<Schedule[]> {
+    const cachedSchedules = await scheduleCache.get();
+    if (cachedSchedules) {
+        // 캐시 히트: 메모리에서 필터링하여 즉시 반환
+        return cachedSchedules.filter(s => s.start_date <= endDate && s.end_date >= startDate).sort((a, b) => a.start_date.localeCompare(b.start_date));
+    }
+
+    // 캐시 미스: Supabase 직접 조회
     return withSyncStatus(async () => {
         const userId = await getCurrentUserId();
         const { data, error } = await supabase
