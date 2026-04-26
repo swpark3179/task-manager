@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { taskCache, calendarCache, categoryCache, scheduleCache, updateTaskInAllCaches, removeTaskFromAllCaches, clearAllCaches } from './cache';
+import { taskCache, calendarCache, categoryCache, scheduleCache, updateTaskInAllCaches, removeTaskFromAllCaches } from './cache';
 import { v4 as uuidv4 } from 'uuid';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
@@ -88,10 +88,10 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
     let tasks = currentTasks || [];
 
     if (snapshots && snapshots.length > 0) {
-      const snapshotTaskIds = snapshots.map(s => s.task_id);
-      const currentTaskIds = new Set(tasks.map(t => t.id));
+      const snapshotTaskIds = snapshots.map((s: any) => s.task_id);
+      const currentTaskIds = new Set(tasks.map((t: any) => t.id));
 
-      const missingTaskIds = snapshotTaskIds.filter(id => !currentTaskIds.has(id));
+      const missingTaskIds = snapshotTaskIds.filter((id: any) => !currentTaskIds.has(id));
 
       if (missingTaskIds.length > 0) {
         const { data: pastTasks } = await supabase
@@ -100,7 +100,7 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
           .in('id', missingTaskIds);
 
         if (pastTasks) {
-          tasks = [...tasks, ...pastTasks.map(t => ({ ...t, is_snapshot: true }))];
+          tasks = [...tasks, ...pastTasks.map((t: any) => ({ ...t, is_snapshot: true }))];
         }
       }
     }
@@ -303,10 +303,10 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
     if (!incompleteTasks || incompleteTasks.length === 0) return 0;
 
     // Find root tasks that need rollover (including those with incomplete children)
-    const allTaskIds = new Set(incompleteTasks.map(t => t.id));
+    const allTaskIds = new Set(incompleteTasks.map((t: any) => t.id));
 
     // Also fetch completed children of incomplete parents
-    const parentIds = incompleteTasks.filter(t => !t.parent_id).map(t => t.id);
+    const parentIds = incompleteTasks.filter((t: any) => !t.parent_id).map((t: any) => t.id);
     if (parentIds.length > 0) {
       const { data: childTasks } = await supabase
         .from('tasks')
@@ -323,7 +323,7 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
     }
 
     // Create snapshots for all tasks being rolled over
-    const snapshots = incompleteTasks.map(t => ({
+    const snapshots = incompleteTasks.map((t: any) => ({
       user_id: userId,
       task_id: t.id,
       snapshot_date: fromDate,
@@ -557,13 +557,21 @@ export async function forceSync(): Promise<void> {
 
 export async function createSchedule(input: CreateScheduleInput): Promise<Schedule> {
   const userId = await getCurrentUserId();
-  const id = input.id || uuidv4();
+  const id = (input as any).id || uuidv4();
   const now = new Date().toISOString();
 
   const newSchedule: Schedule = {
     id,
     user_id: userId,
-    ...input,
+    title: input.title,
+    category_id: input.category_id ?? null,
+    description: input.description ?? null,
+    start_date: input.start_date,
+    end_date: input.end_date,
+    estimated_time: input.estimated_time ?? null,
+    scheduled_time: input.scheduled_time ?? null,
+    notify_at: input.notify_at ?? null,
+    notify_offset_minutes: input.notify_offset_minutes ?? null,
     created_at: now,
     updated_at: now,
   };
