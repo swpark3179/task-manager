@@ -16,6 +16,7 @@ import {
 } from "../utils/dateUtils";
 import type { CalendarCellData, Category, Schedule } from "../types";
 import { buildTaskTree } from "../utils/taskUtils";
+import { getCalendarFromMemoryCacheSync } from "../lib/cache";
 import TaskInput from "../components/tasks/TaskInput";
 import TaskTree from "../components/tasks/TaskTree";
 import ScheduleModal from "../components/schedules/ScheduleModal";
@@ -54,8 +55,14 @@ export default function CalendarPage() {
   const today = getTodayString();
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
-  const [calendarData, setCalendarData] = useState<CalendarCellData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [calendarData, setCalendarData] = useState<CalendarCellData[]>(() => {
+    const ym = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    return getCalendarFromMemoryCacheSync(ym) || [];
+  });
+  const [loading, setLoading] = useState(() => {
+    const ym = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    return !getCalendarFromMemoryCacheSync(ym);
+  });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [viewMode, setViewMode] = useState<"tree" | "leaf">("tree");

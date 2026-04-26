@@ -14,6 +14,8 @@ interface CacheEntry<T> {
   cachedAt: number;
 }
 
+const memoryCache = new Map<string, CacheEntry<any>>();
+
 const CACHE_TTL = {
   tasks: Infinity,         // 동기화 시에만 갱신 (앱 시작 / 자동 동기화)
   progressLogs: 12 * 60 * 60 * 1000, // 12 hours
@@ -60,9 +62,18 @@ async function getCached<T>(
   ttl: number
 ): Promise<T | null> {
   try {
+    const memKey = `${storeName}:${key}`;
+    const memEntry = memoryCache.get(memKey);
+    if (memEntry) {
+      if (ttl === 0) return memEntry.data;
+      if (Date.now() - memEntry.cachedAt <= ttl) return memEntry.data;
+    }
+
     const db = await getDB();
     const entry = await db.get(storeName, key) as CacheEntry<T> | undefined;
     if (!entry) return null;
+
+    memoryCache.set(memKey, entry);
 
     // If TTL is 0, always return stale data (will be revalidated)
     if (ttl === 0) return entry.data;
@@ -83,11 +94,14 @@ async function setCache<T>(
   data: T
 ): Promise<void> {
   try {
-    const db = await getDB();
     const entry: CacheEntry<T> = {
       data,
       cachedAt: Date.now(),
     };
+    const memKey = `${storeName}:${key}`;
+    memoryCache.set(memKey, entry);
+
+    const db = await getDB();
     await db.put(storeName, entry, key);
   } catch {
     // Cache write failure is non-critical
@@ -96,6 +110,16 @@ async function setCache<T>(
 
 async function invalidateCache(storeName: string, key?: string): Promise<void> {
   try {
+    if (key) {
+      memoryCache.delete(`${storeName}:${key}`);
+    } else {
+      for (const k of memoryCache.keys()) {
+        if (k.startsWith(`${storeName}:`)) {
+          memoryCache.delete(k);
+        }
+      }
+    }
+
     const db = await getDB();
     if (key) {
       await db.delete(storeName, key);
@@ -103,7 +127,7 @@ async function invalidateCache(storeName: string, key?: string): Promise<void> {
       await db.clear(storeName);
     }
   } catch {
-    // Cache invalidation failure is non-critical
+    console.error('Failed to invalidate cache');
   }
 }
 
@@ -342,6 +366,21 @@ export const scheduleCache = {
 // =============================================
 // Clear all caches (e.g., on logout)
 // =============================================
+
+export function getScheduleFromMemoryCacheSync(): Schedule[] {
+  const entry = memoryCache.get('schedules:all');
+  return entry ? entry.data : [];
+}
+
+export function getCalendarFromMemoryCacheSync(yearMonth: string): CalendarCellData[] | null {
+  const entry = memoryCache.get(`calendar:${yearMonth}`);
+  return entry ? entry.data : null;
+}
+
+export function getTasksFromMemoryCacheSync(date: string): Task[] | null {
+  const entry = memoryCache.get(`tasks:${date}`);
+  return entry ? entry.data : null;
+}
 
 export async function clearAllCaches(): Promise<void> {
   try {

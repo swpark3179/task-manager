@@ -14,6 +14,7 @@ import type { Task, Schedule } from '../types';
 import ScheduleSection from '../components/schedules/ScheduleSection';
 import ScheduleModal from '../components/schedules/ScheduleModal';
 import { useSyncStatus } from '../components/common/SyncIndicator';
+import { getScheduleFromMemoryCacheSync, getTasksFromMemoryCacheSync } from '../lib/cache';
 import './Pages.css';
 
 export default function TodayPage() {
@@ -25,9 +26,14 @@ export default function TodayPage() {
     onSwipedRight: () => navigate(`/history/${getPrevDay(today)}`)
   });
 
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    return getTasksFromMemoryCacheSync(today) || [];
+  });
+  const [schedules, setSchedules] = useState<Schedule[]>(() => {
+    const mem = getScheduleFromMemoryCacheSync();
+    return mem.filter(s => s.start_date <= today && s.end_date >= today).sort((a, b) => a.start_date.localeCompare(b.start_date));
+  });
+  const [loading, setLoading] = useState(!getTasksFromMemoryCacheSync(today));
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const syncStatus = useSyncStatus();

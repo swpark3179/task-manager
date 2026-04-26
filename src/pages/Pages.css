@@ -790,7 +790,7 @@
   width: 92%;
   padding: 0;
   gap: 0;
-  max-height: 90vh;
+  max-height: calc(100dvh - 48px);
   overflow: hidden;
 }
 
@@ -834,6 +834,7 @@
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  max-height: calc(100dvh - 48px - 60px - 70px);
 }
 
 .schedule-modal-row {
@@ -894,7 +895,7 @@
   .modal-content.schedule-modal {
     width: 100%;
     max-width: 100%;
-    max-height: 92vh;
+    max-height: calc(100dvh - 48px);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     margin-top: auto;
     align-self: stretch;
