@@ -23,6 +23,7 @@ import ScheduleSection from "../components/schedules/ScheduleSection";
 import type { Task } from "../types";
 import { useSyncStatus } from "../components/common/SyncIndicator";
 
+import { getContrastColor } from "../utils/colorUtils";
 import "./Pages.css";
 
 const BAR_HEIGHT = 16;
@@ -647,7 +648,7 @@ export default function CalendarPage() {
                           style={{
                             gridColumn: `${bar.startCol + 1} / ${bar.endCol + 2}`,
                             gridRow: bar.lane + 1,
-                            ...(catColor ? { background: catColor } : undefined),
+                            ...(catColor ? { background: catColor, color: getContrastColor(catColor) } : undefined),
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
