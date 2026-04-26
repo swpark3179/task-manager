@@ -276,6 +276,7 @@ export default function CalendarPage() {
   const handleMouseUp = () => {
     if (isDragging) {
       setIsDragging(false);
+      window.getSelection()?.removeAllRanges();
       if (dragStart && dragEnd) {
         if (dragStart === dragEnd) {
           // It's a click, trigger normal cell click
@@ -374,6 +375,7 @@ export default function CalendarPage() {
       // It was a long press drag
       isLongPressTriggeredRef.current = false;
       setIsDragging(false);
+      window.getSelection()?.removeAllRanges();
 
       if (dragStart && dragEnd && dragStart !== dragEnd) {
         setSelectedSchedule(null);
