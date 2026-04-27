@@ -1,8 +1,8 @@
-import type { Task } from '../../types';
+import type { Task, TaskStatus } from '../../types';
 import TaskTree from './TaskTree';
 import TaskInput from './TaskInput';
-import { calculateStatusSummary, getLeafTasks } from '../../utils/taskUtils';
-import { useState, useMemo } from 'react';
+import { calculateStatusSummary, getLeafTasks, filterTasksByStatus } from '../../utils/taskUtils';
+import { useState, useMemo, useCallback } from 'react';
 import './Tasks.css';
 
 interface TaskListProps {
@@ -26,9 +26,18 @@ export default function TaskList({
   onDelete, onUpdateSettings, onAddChild, onSaveDescription, isHistory
 }: TaskListProps) {
   const [viewMode, setViewMode] = useState<'tree' | 'leaf'>('tree');
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | null>(null);
   const summary = useMemo(() => calculateStatusSummary(tasks), [tasks]);
 
-  const displayTasks = useMemo(() => viewMode === 'tree' ? tasks : getLeafTasks(tasks), [viewMode, tasks]);
+  const toggleFilter = useCallback((status: TaskStatus) => {
+    setStatusFilter((prev) => prev === status ? null : status);
+  }, []);
+
+  const displayTasks = useMemo(() => {
+    const base = viewMode === 'tree' ? tasks : getLeafTasks(tasks);
+    if (!statusFilter) return base;
+    return filterTasksByStatus(base, statusFilter);
+  }, [viewMode, tasks, statusFilter]);
 
   const normalTasks = useMemo(() => displayTasks.filter(t => !t.low_priority), [displayTasks]);
   const lowPriorityTasks = useMemo(() => displayTasks.filter(t => t.low_priority), [displayTasks]);
@@ -41,21 +50,37 @@ export default function TaskList({
       {/* Summary bar */}
       {tasks.length > 0 && (
         <div className="task-list-summary" style={{ marginBottom: 'var(--space-md)' }}>
-          <span className="task-list-count badge badge-completed">
+          <button
+            type="button"
+            className={`task-list-count badge badge-completed ${statusFilter === 'completed' ? 'badge-filter-active' : ''}`}
+            onClick={() => toggleFilter('completed')}
+          >
             완료 {summary.completed}
-          </span>
+          </button>
           {summary.inProgress > 0 && (
-            <span className="task-list-count badge badge-in-progress">
+            <button
+              type="button"
+              className={`task-list-count badge badge-in-progress ${statusFilter === 'in_progress' ? 'badge-filter-active' : ''}`}
+              onClick={() => toggleFilter('in_progress')}
+            >
               진행 {summary.inProgress}
-            </span>
+            </button>
           )}
-          <span className="task-list-count badge badge-pending">
+          <button
+            type="button"
+            className={`task-list-count badge badge-pending ${statusFilter === 'pending' ? 'badge-filter-active' : ''}`}
+            onClick={() => toggleFilter('pending')}
+          >
             대기 {summary.pending}
-          </span>
+          </button>
           {summary.discarded > 0 && (
-            <span className="task-list-count badge badge-discarded">
+            <button
+              type="button"
+              className={`task-list-count badge badge-discarded ${statusFilter === 'discarded' ? 'badge-filter-active' : ''}`}
+              onClick={() => toggleFilter('discarded')}
+            >
               폐기 {summary.discarded}
-            </span>
+            </button>
           )}
 
           <div style={{ flex: 1 }} />
@@ -86,6 +111,22 @@ export default function TaskList({
               }}
             />
           </div>
+        </div>
+      )}
+
+      {statusFilter && (
+        <div className="filter-indicator" style={{ marginBottom: 'var(--space-sm)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+            필터: {statusFilter === 'completed' ? '완료' : statusFilter === 'in_progress' ? '진행' : statusFilter === 'pending' ? '대기' : '폐기'}
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => setStatusFilter(null)}
+            style={{ fontSize: '0.75rem', padding: '2px 6px' }}
+          >
+            ✕ 해제
+          </button>
         </div>
       )}
 
@@ -120,6 +161,11 @@ export default function TaskList({
       {/* Task tree */}
       {tasks.length > 0 && (
         <>
+          {normalTasks.length === 0 && lowPriorityTasks.length === 0 && statusFilter && (
+            <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0', fontSize: '0.875rem' }}>
+              해당 상태의 작업이 없습니다.
+            </p>
+          )}
           <TaskTree
             tasks={normalTasks}
             onComplete={onComplete}

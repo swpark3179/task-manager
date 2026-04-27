@@ -92,7 +92,23 @@ export default function CalendarPage() {
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const [animKey, setAnimKey] = useState(0);
 
+  // 년/월 선택 피커
+  const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(year);
+  const yearMonthPickerRef = useRef<HTMLDivElement>(null);
+
   const modalBodyRef = useRubberBandScroll<HTMLDivElement>();
+
+  useEffect(() => {
+    if (!showYearMonthPicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (yearMonthPickerRef.current && !yearMonthPickerRef.current.contains(e.target as Node)) {
+        setShowYearMonthPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showYearMonthPicker]);
 
 
 
@@ -200,6 +216,26 @@ export default function CalendarPage() {
     }
     setYear(now.getFullYear());
     setMonth(now.getMonth() + 1);
+  };
+
+  const handlePickMonth = (targetMonth: number) => {
+    const targetYear = pickerYear;
+    if (targetYear === year && targetMonth === month) {
+      setShowYearMonthPicker(false);
+      return;
+    }
+    const goingForward =
+      targetYear > year || (targetYear === year && targetMonth > month);
+    setSlideDirection(goingForward ? 'right' : 'left');
+    setAnimKey((k) => k + 1);
+    setYear(targetYear);
+    setMonth(targetMonth);
+    setShowYearMonthPicker(false);
+  };
+
+  const toggleYearMonthPicker = () => {
+    setPickerYear(year);
+    setShowYearMonthPicker((v) => !v);
   };
 
   const getCellData = (dateStr: string): CalendarCellData | undefined => {
@@ -488,9 +524,39 @@ export default function CalendarPage() {
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
-          <span className="calendar-month-label">
-            {formatMonthYear(new Date(year, month - 1))}
-          </span>
+          <div className="calendar-month-picker-wrapper" ref={yearMonthPickerRef}>
+            <button className="calendar-month-label" onClick={toggleYearMonthPicker} type="button">
+              {formatMonthYear(new Date(year, month - 1))}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '4px', transform: showYearMonthPicker ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {showYearMonthPicker && (
+              <div className="year-month-picker">
+                <div className="year-month-picker-year-row">
+                  <button type="button" className="year-month-picker-arrow" onClick={() => setPickerYear((y) => y - 1)} aria-label="이전 년도">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                  </button>
+                  <span className="year-month-picker-year">{pickerYear}년</span>
+                  <button type="button" className="year-month-picker-arrow" onClick={() => setPickerYear((y) => y + 1)} aria-label="다음 년도">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+                  </button>
+                </div>
+                <div className="year-month-picker-grid">
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`year-month-picker-month ${pickerYear === year && m === month ? 'active' : ''} ${pickerYear === new Date().getFullYear() && m === new Date().getMonth() + 1 ? 'current' : ''}`}
+                      onClick={() => handlePickMonth(m)}
+                    >
+                      {m}월
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           <button className="calendar-nav-btn" onClick={nextMonth} aria-label="다음 달">
             <svg
               width="18"
@@ -510,6 +576,17 @@ export default function CalendarPage() {
           </button>
         </div>
 
+        <div className="calendar-header-row calendar-header-fixed">
+          {dayLabels.map((day) => (
+            <div
+              key={day}
+              className={`calendar-header-cell ${day === "일" ? "sunday" : ""} ${day === "토" ? "saturday" : ""}`}
+            >
+              {day}
+            </div>
+          ))}
+        </div>
+
         <div
           ref={calendarGridRef}
           key={animKey}
@@ -519,17 +596,6 @@ export default function CalendarPage() {
           onTouchMove={handleTouchMove}
           onAnimationEnd={() => setSlideDirection(null)}
         >
-          <div className="calendar-header-row">
-            {dayLabels.map((day) => (
-              <div
-                key={day}
-                className={`calendar-header-cell ${day === "일" ? "sunday" : ""} ${day === "토" ? "saturday" : ""}`}
-              >
-                {day}
-              </div>
-            ))}
-          </div>
-
           {weeks.map((week, wIdx) => {
             const bars = computeWeekBars(week);
             const laneCount = bars.reduce((m, b) => Math.max(m, b.lane + 1), 0);

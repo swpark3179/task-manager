@@ -174,3 +174,20 @@ export function getLeafTasks(tasks: Task[]): Task[] {
   traverse(tasks);
   return result;
 }
+
+export function filterTasksByStatus(tasks: Task[], status: TaskStatus): Task[] {
+  const result: Task[] = [];
+  for (const task of tasks) {
+    if (task.children && task.children.length > 0) {
+      const filteredChildren = filterTasksByStatus(task.children, status);
+      if (filteredChildren.length > 0) {
+        result.push({ ...task, children: filteredChildren });
+      } else if (task.status === status) {
+        result.push({ ...task, children: [] });
+      }
+    } else if (task.status === status) {
+      result.push(task);
+    }
+  }
+  return result;
+}

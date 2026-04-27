@@ -175,7 +175,9 @@ export async function removeTaskFromAllCaches(taskId: string): Promise<void> {
       const entry = cursor.value;
       const initialLength = entry.data.length;
 
-      entry.data = entry.data.filter((t: Task) => t.id !== taskId && t.parent_id !== taskId);
+      const idsToRemove = collectDescendantIds(entry.data, taskId);
+      idsToRemove.add(taskId);
+      entry.data = entry.data.filter((t: Task) => !idsToRemove.has(t.id));
 
       if (entry.data.length !== initialLength) {
         await cursor.update(entry);
@@ -187,6 +189,21 @@ export async function removeTaskFromAllCaches(taskId: string): Promise<void> {
   } catch (err) {
     console.error('Failed to remove from cache:', err);
   }
+}
+
+function collectDescendantIds(tasks: Task[], parentId: string): Set<string> {
+  const ids = new Set<string>();
+  const queue = [parentId];
+  while (queue.length > 0) {
+    const current = queue.pop()!;
+    for (const t of tasks) {
+      if (t.parent_id === current && !ids.has(t.id)) {
+        ids.add(t.id);
+        queue.push(t.id);
+      }
+    }
+  }
+  return ids;
 }
 
 export async function getTaskFromAllCaches(taskId: string): Promise<Task | null> {
@@ -253,7 +270,9 @@ export async function removeTaskFromCache(taskId: string): Promise<void> {
       const entry = cursor.value;
       const initialLength = entry.data.length;
 
-      entry.data = entry.data.filter((t: Task) => t.id !== taskId && t.parent_id !== taskId);
+      const idsToRemove = collectDescendantIds(entry.data, taskId);
+      idsToRemove.add(taskId);
+      entry.data = entry.data.filter((t: Task) => !idsToRemove.has(t.id));
 
       if (entry.data.length !== initialLength) {
         await cursor.update(entry);
@@ -308,7 +327,9 @@ export const taskCache = {
   removeTask: async (date: string, taskId: string) => {
     const tasks = await getCached<Task[]>('tasks', date, 0);
     if (tasks) {
-      const newTasks = tasks.filter(t => t.id !== taskId && t.parent_id !== taskId);
+      const idsToRemove = collectDescendantIds(tasks, taskId);
+      idsToRemove.add(taskId);
+      const newTasks = tasks.filter(t => !idsToRemove.has(t.id));
       await setCache('tasks', date, newTasks);
     }
   }

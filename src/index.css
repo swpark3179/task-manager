@@ -313,6 +313,24 @@ h4 { font-size: 1rem; font-weight: 500; line-height: 1.4; }
   color: #b36941;
 }
 
+.badge-filter-active {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+.task-list-count.badge {
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+  border: none;
+  font-family: inherit;
+}
+
+.task-list-count.badge:hover {
+  filter: brightness(0.92);
+}
+
 /* =============================================
    Toggle Switch
    ============================================= */
