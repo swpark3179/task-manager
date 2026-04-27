@@ -4,7 +4,7 @@ import TaskSettingsModal from './modals/TaskSettingsModal';
 import TaskCheckbox from './TaskCheckbox';
 import TaskTree from './TaskTree';
 import TaskDetail from './TaskDetail';
-import { hasChildren } from '../../utils/taskUtils';
+import { hasChildren, getEffectiveStatus } from '../../utils/taskUtils';
 import './Tasks.css';
 
 interface TaskItemProps {
@@ -29,8 +29,11 @@ export default function TaskItem({
   const [showSettings, setShowSettings] = useState(false);
 
   const isParent = hasChildren(task);
-  const isCompleted = task.status === 'completed';
-  const isDiscarded = task.status === 'discarded';
+  // For parents, the stored status is not auto-updated when children change;
+  // derive the displayed state so the row visually matches its children.
+  const effectiveStatus = isParent ? getEffectiveStatus(task) : task.status;
+  const isCompleted = effectiveStatus === 'completed';
+  const isDiscarded = effectiveStatus === 'discarded';
 
 
   return (
@@ -40,7 +43,7 @@ export default function TaskItem({
     >
       <div className="task-item-main" onClick={() => setExpanded(!expanded)}>
         <TaskCheckbox
-          status={task.status}
+          status={effectiveStatus}
           disabled={isParent || task.is_snapshot}
           onComplete={task.is_snapshot ? () => {} : () => onComplete(task.id)}
           onUncomplete={task.is_snapshot ? undefined : (onUncomplete ? () => onUncomplete(task.id) : undefined)}

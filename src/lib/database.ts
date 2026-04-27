@@ -41,15 +41,59 @@ async function withSyncStatus<T>(operation: () => Promise<T>): Promise<T> {
 // =============================================
 // Background Sync Helper
 // =============================================
+//
+// Optimistic mutations call this so the UI never waits on the network.
+// We track in-flight syncs and retry transient failures with exponential
+// backoff so a brief connectivity blip doesn't leave local state diverged
+// from the server.
+
+const RETRY_DELAYS_MS = [2000, 4000, 8000, 16000];
+let inFlightSyncs = 0;
+
+function isTransientError(err: unknown): boolean {
+  // Treat anything without a Supabase 4xx response as transient.
+  // Postgres / Supabase errors expose `code` (e.g. '23505', 'PGRST...').
+  // Network failures (TypeError: Failed to fetch, AbortError) have no `code`.
+  if (!err || typeof err !== 'object') return true;
+  const anyErr = err as { code?: unknown; status?: unknown };
+  if (typeof anyErr.code === 'string' && anyErr.code.length > 0) return false;
+  if (typeof anyErr.status === 'number' && anyErr.status >= 400 && anyErr.status < 500) {
+    return false;
+  }
+  return true;
+}
 
 function runBackgroundSync(promiseFactory: () => Promise<void>) {
+  inFlightSyncs++;
   setSyncStatus('syncing');
-  promiseFactory().then(() => {
-    setSyncStatus('synced');
-  }).catch((err) => {
-    console.error('Background sync failed:', err);
-    setSyncStatus('error');
-  });
+
+  const finalize = (ok: boolean, err?: unknown) => {
+    inFlightSyncs = Math.max(0, inFlightSyncs - 1);
+    if (inFlightSyncs > 0) {
+      // Other syncs still pending — let them drive the final status.
+      return;
+    }
+    if (ok) {
+      setSyncStatus('synced');
+    } else {
+      console.error('Background sync failed (giving up):', err);
+      setSyncStatus('error');
+    }
+  };
+
+  const attempt = (retryIndex: number): void => {
+    promiseFactory()
+      .then(() => finalize(true))
+      .catch((err) => {
+        if (retryIndex < RETRY_DELAYS_MS.length && isTransientError(err)) {
+          setTimeout(() => attempt(retryIndex + 1), RETRY_DELAYS_MS[retryIndex]);
+        } else {
+          finalize(false, err);
+        }
+      });
+  };
+
+  attempt(0);
 }
 
 // =============================================
@@ -197,21 +241,24 @@ export async function deleteTask(id: string): Promise<void> {
 
 
 export async function uncompleteTask(id: string): Promise<void> {
-  return withSyncStatus(async () => {
-    // Update task
+  // Optimistic update — UI reflects the change immediately, network syncs in
+  // the background (with retries) so poor connectivity doesn't block input.
+  await updateTaskInAllCaches(id, {
+    status: 'pending',
+    completed_at: null,
+  });
+  await calendarCache.invalidate();
+
+  runBackgroundSync(async () => {
     const updates: UpdateTaskInput = {
       status: 'pending',
       completed_at: null,
     };
-
     const { error } = await supabase
       .from('tasks')
       .update(updates)
       .eq('id', id);
-
     if (error) throw error;
-
-    await taskCache.invalidate();
   });
 }
 

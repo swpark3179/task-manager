@@ -4,22 +4,6 @@ import type { Task, TaskStatus, TaskStatusSummary } from '../types';
 // Task Status Computation Utilities
 // =============================================
 
-export function computeParentStatus(children: Task[]): TaskStatus {
-  const activeChildren = children.filter(c => c.status !== 'discarded');
-
-  if (activeChildren.length === 0) return 'completed';
-
-  const allCompleted = activeChildren.every(c => c.status === 'completed');
-  if (allCompleted) return 'completed';
-
-  const anyProgress = activeChildren.some(
-    c => c.status === 'in_progress' || c.status === 'completed'
-  );
-  if (anyProgress) return 'in_progress';
-
-  return 'pending';
-}
-
 export function hasChildren(task: Task): boolean {
   return Array.isArray(task.children) && task.children.length > 0;
 }
@@ -28,6 +12,10 @@ export function isCheckboxInteractive(task: Task): boolean {
   return !hasChildren(task);
 }
 
+// Effective status reflects the derived state from descendants.
+// Parents whose stored `status` is not terminal (completed/discarded) are
+// computed from their children — recursively, so deeply nested hierarchies
+// are evaluated correctly.
 export function getEffectiveStatus(task: Task): TaskStatus {
   if (task.status === 'completed' || task.status === 'discarded') {
     return task.status;
@@ -37,6 +25,23 @@ export function getEffectiveStatus(task: Task): TaskStatus {
     return computeParentStatus(task.children!);
   }
   return task.status;
+}
+
+export function computeParentStatus(children: Task[]): TaskStatus {
+  const activeChildren = children.filter(c => getEffectiveStatus(c) !== 'discarded');
+
+  if (activeChildren.length === 0) return 'completed';
+
+  const allCompleted = activeChildren.every(c => getEffectiveStatus(c) === 'completed');
+  if (allCompleted) return 'completed';
+
+  const anyProgress = activeChildren.some(c => {
+    const s = getEffectiveStatus(c);
+    return s === 'in_progress' || s === 'completed';
+  });
+  if (anyProgress) return 'in_progress';
+
+  return 'pending';
 }
 
 export function calculateStatusSummary(tasks: Task[]): TaskStatusSummary {
@@ -50,7 +55,9 @@ export function calculateStatusSummary(tasks: Task[]): TaskStatusSummary {
 
   for (const task of tasks) {
     summary.total++;
-    switch (task.status) {
+    // Use effective status so a parent whose children are all completed
+    // is counted as completed even if its stored DB status is still 'pending'.
+    switch (getEffectiveStatus(task)) {
       case 'completed':
         summary.completed++;
         break;
@@ -86,10 +93,14 @@ export function getCompletionPercentage(task: Task): number {
   let activeCount = 0;
   let completedCount = 0;
 
+  // Use effective status so multi-level hierarchies aggregate correctly:
+  // a child that is itself a parent counts as completed when all of its
+  // own descendants are completed, regardless of the child's stored status.
   for (const child of task.children!) {
-    if (child.status !== 'discarded') {
+    const status = getEffectiveStatus(child);
+    if (status !== 'discarded') {
       activeCount++;
-      if (child.status === 'completed') {
+      if (status === 'completed') {
         completedCount++;
       }
     }
@@ -147,15 +158,13 @@ export function flattenTaskTree(tasks: Task[]): Task[] {
 }
 
 export function hasIncompleteTasks(task: Task): boolean {
-  if (task.status === 'pending' || task.status === 'in_progress') {
-    return true;
+  // Parents are evaluated by their children — the stored `status` of an
+  // intermediate parent is unreliable, so always recurse first.
+  if (hasChildren(task)) {
+    return task.children!.some(child => hasIncompleteTasks(child));
   }
 
-  if (task.children) {
-    return task.children.some(child => hasIncompleteTasks(child));
-  }
-
-  return false;
+  return task.status === 'pending' || task.status === 'in_progress';
 }
 
 
