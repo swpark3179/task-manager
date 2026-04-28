@@ -168,6 +168,28 @@ export default function CalendarPage() {
     };
   }, [isDragging]);
 
+  // Defensive cleanup: if a pointer is released outside the grid or the window
+  // loses focus mid-drag, force-clear the selection so cells don't stay
+  // highlighted. The grid's own onMouseUp/onMouseLeave already handles the
+  // common path; this guards the rare cases (alt-tab, release on overlay, etc.).
+  useEffect(() => {
+    if (!isDragging && !dragStart && !dragEnd) return;
+    const clearDragState = () => {
+      setIsDragging(false);
+      setDragStart(null);
+      setDragEnd(null);
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') clearDragState();
+    };
+    window.addEventListener('blur', clearDragState);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('blur', clearDragState);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isDragging, dragStart, dragEnd]);
+
   const grid = getMonthCalendarGrid(year, month);
 
   const weeks = useMemo(() => {
@@ -306,34 +328,40 @@ export default function CalendarPage() {
     if (target.closest('.calendar-task-item') || target.closest('.calendar-task-more') || target.closest('.calendar-cell-date') || target.closest('.schedule-bar')) {
       return;
     }
-    setIsDragging(true);
+    // Defer isDragging until the pointer actually moves to another cell so a
+    // simple click never visibly highlights the cell as "selected".
     setDragStart(dateStr);
     setDragEnd(dateStr);
   };
 
   const handleMouseEnter = (dateStr: string) => {
-    if (isDragging) {
-      setDragEnd(dateStr);
+    if (!dragStart) return;
+    if (!isDragging && dateStr !== dragStart) {
+      setIsDragging(true);
     }
+    setDragEnd(dateStr);
   };
 
   const handleMouseUp = () => {
     if (isDragging) {
       setIsDragging(false);
       window.getSelection()?.removeAllRanges();
-      if (dragStart && dragEnd) {
-        if (dragStart === dragEnd) {
-          // It's a click, trigger normal cell click
-          handleCellClick(dragStart);
-        } else {
-          // It's a drag, open schedule modal
-          setSelectedSchedule(null);
-          setScheduleModalRange(normalizeDateRange(dragStart, dragEnd));
-          setShowScheduleModal(true);
-          setDragStart(null);
-          setDragEnd(null);
-        }
+      if (dragStart && dragEnd && dragStart !== dragEnd) {
+        // Real multi-cell drag: open schedule modal
+        setSelectedSchedule(null);
+        setScheduleModalRange(normalizeDateRange(dragStart, dragEnd));
+        setShowScheduleModal(true);
+      } else if (dragStart) {
+        // Drag returned to its origin: behave like a normal click
+        handleCellClick(dragStart);
       }
+      setDragStart(null);
+      setDragEnd(null);
+    } else if (dragStart || dragEnd) {
+      // Mouse released without ever starting a drag — clear pending state.
+      // The cell's onClick handler will open the day modal as usual.
+      setDragStart(null);
+      setDragEnd(null);
     }
   };
   const handleTouchStart = (dateStr: string, e: React.TouchEvent) => {
