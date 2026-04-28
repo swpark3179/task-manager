@@ -123,6 +123,18 @@ export default function CalendarPage() {
   };
 
   const loadCalendarData = useCallback(async (cancelledRef?: { current: boolean }) => {
+    const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+    const memoryHit = getCalendarFromMemoryCacheSync(yearMonth);
+
+    // 메모리 캐시 히트 시: 스피너 없이 즉시 반영
+    if (memoryHit) {
+      if (!cancelledRef?.current) {
+        setCalendarData(memoryHit);
+        setLoading(false);
+      }
+      return;
+    }
+
     setLoading(true);
     try {
       const data = await fetchCalendarData(year, month, (fresh) => {
@@ -134,6 +146,16 @@ export default function CalendarPage() {
       console.error("Failed to load calendar data:", err);
     } finally {
       if (!cancelledRef?.current) setLoading(false);
+    }
+  }, [year, month]);
+
+  // 월 전환 시 메모리 캐시가 있으면 즉시 표시 (스피너 깜빡임 방지)
+  useEffect(() => {
+    const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+    const memoryHit = getCalendarFromMemoryCacheSync(yearMonth);
+    if (memoryHit) {
+      setCalendarData(memoryHit);
+      setLoading(false);
     }
   }, [year, month]);
 

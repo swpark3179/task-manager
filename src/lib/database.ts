@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { taskCache, calendarCache, categoryCache, scheduleCache, updateTaskInAllCaches, removeTaskFromAllCaches } from './cache';
+import { taskCache, calendarCache, categoryCache, scheduleCache, updateTaskInAllCaches, removeTaskFromAllCaches, getCalendarFromMemoryCacheSync } from './cache';
 import { v4 as uuidv4 } from 'uuid';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
@@ -553,10 +553,17 @@ export async function fetchCalendarData(
   onRevalidated?: (data: CalendarCellData[]) => void,
 ): Promise<CalendarCellData[]> {
   const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+
+  // 메모리 캐시 히트: IndexedDB 조회조차 건너뛰고 즉시 반환
+  const memoryHit = getCalendarFromMemoryCacheSync(yearMonth);
+  if (memoryHit) {
+    if (onRevalidated) onRevalidated(memoryHit);
+    return memoryHit;
+  }
+
   const cached = await calendarCache.get(yearMonth);
   if (cached) {
-    // 캐시 히트: 로컬 DB만 사용 (재검증 없음)
-    // onRevalidated 콜백은 자동동기화 시 응답 포맧 호환성 용도로만 유지
+    // IndexedDB 캐시 히트: 로컬 DB만 사용 (재검증 없음)
     if (onRevalidated) onRevalidated(cached);
     return cached;
   }
