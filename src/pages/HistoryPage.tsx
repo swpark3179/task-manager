@@ -2,20 +2,26 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSwipe } from '../hooks/useSwipe';
 import TaskList from '../components/tasks/TaskList';
+import ScheduleSection from '../components/schedules/ScheduleSection';
+import ScheduleModal from '../components/schedules/ScheduleModal';
 import {
   fetchTasksByDate, updateTask, deleteTask,
-  completeTask, uncompleteTask, discardTask, undiscardTask, createTask
+  completeTask, uncompleteTask, discardTask, undiscardTask, createTask,
+  fetchSchedulesForDateRange,
 } from '../lib/database';
 import { formatDateFull, getNextDay, getPrevDay, getTodayString } from '../utils/dateUtils';
 import { useSyncStatus } from '../components/common/SyncIndicator';
-import type { Task } from '../types';
+import type { Task, Schedule } from '../types';
 import './Pages.css';
 
 export default function HistoryPage() {
   const { date } = useParams<{ date: string }>();
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const today = getTodayString();
   const viewDate = date || today;
   const syncStatus = useSyncStatus();
@@ -33,14 +39,24 @@ export default function HistoryPage() {
     }
   }, [viewDate]);
 
+  const loadSchedules = useCallback(async () => {
+    try {
+      const data = await fetchSchedulesForDateRange(viewDate, viewDate);
+      setSchedules(data);
+    } catch (err) {
+      console.error('Failed to load schedules:', err);
+    }
+  }, [viewDate]);
+
   const swipeHandlers = useSwipe({
     onSwipedLeft: () => goToDate(getNextDay(viewDate)),
     onSwipedRight: () => goToDate(getPrevDay(viewDate))
   });
 
   useEffect(() => {
-    loadTasks();
-  }, [loadTasks]);
+    void loadTasks();
+    void loadSchedules();
+  }, [loadTasks, loadSchedules]);
 
   useEffect(() => {
     const previousStatus = previousSyncStatusRef.current;
@@ -48,8 +64,9 @@ export default function HistoryPage() {
 
     if (previousStatus === 'syncing' && syncStatus === 'synced') {
       void loadTasks();
+      void loadSchedules();
     }
-  }, [loadTasks, syncStatus]);
+  }, [loadTasks, loadSchedules, syncStatus]);
 
   const goToDate = (newDate: string) => {
     if (newDate === today) {
@@ -80,22 +97,66 @@ export default function HistoryPage() {
       </div>
 
       <div className="page-content">
-        <TaskList
-          tasks={tasks}
+        <section className="today-schedules-section" style={{ marginBottom: 'var(--space-lg)' }}>
+          <div className="modal-section-header" style={{ marginBottom: '8px' }}>
+            <h2 className="today-section-title">일정</h2>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                setEditingSchedule(null);
+                setShowScheduleModal(true);
+              }}
+            >
+              + 일정 등록
+            </button>
+          </div>
+          <ScheduleSection
+            schedules={schedules}
+            onEdit={(s) => {
+              setEditingSchedule(s);
+              setShowScheduleModal(true);
+            }}
+            emptyText="이 날짜에 걸쳐있는 일정이 없습니다."
+          />
+        </section>
 
-          loading={loading}
-          onAddTask={async (title) => { await createTask({ title, created_date: viewDate }); await loadTasks(); }}
-          isHistory={true}
-          onComplete={async (id) => { await completeTask(id); await loadTasks(); }}
-          onUncomplete={async (id) => { await uncompleteTask(id); await loadTasks(); }}
-          onDiscard={async (id) => { await discardTask(id); await loadTasks(); }}
-          onUndiscard={async (id) => { await undiscardTask(id); await loadTasks(); }}
-          onDelete={async (id) => { if (confirm('삭제하시겠습니까?')) { await deleteTask(id); await loadTasks(); } }}
-          onUpdateSettings={async (id, updates) => { await updateTask(id, updates); await loadTasks(); }}
-          onAddChild={async (parentId, title) => { await createTask({ title, parent_id: parentId, created_date: viewDate }); await loadTasks(); }}
-          onSaveDescription={async (taskId, description) => { await updateTask(taskId, { description }); await loadTasks(); }}
-        />
+        <section className="today-tasks-section">
+          <h2 className="today-section-title" style={{ marginBottom: '8px' }}>작업</h2>
+          <TaskList
+            tasks={tasks}
+
+            loading={loading}
+            onAddTask={async (title) => { await createTask({ title, created_date: viewDate }); await loadTasks(); }}
+            isHistory={true}
+            onComplete={async (id) => { await completeTask(id); await loadTasks(); }}
+            onUncomplete={async (id) => { await uncompleteTask(id); await loadTasks(); }}
+            onDiscard={async (id) => { await discardTask(id); await loadTasks(); }}
+            onUndiscard={async (id) => { await undiscardTask(id); await loadTasks(); }}
+            onDelete={async (id) => { if (confirm('삭제하시겠습니까?')) { await deleteTask(id); await loadTasks(); } }}
+            onUpdateSettings={async (id, updates) => { await updateTask(id, updates); await loadTasks(); }}
+            onAddChild={async (parentId, title) => { await createTask({ title, parent_id: parentId, created_date: viewDate }); await loadTasks(); }}
+            onSaveDescription={async (taskId, description) => { await updateTask(taskId, { description }); await loadTasks(); }}
+          />
+        </section>
       </div>
+
+      {showScheduleModal && (
+        <ScheduleModal
+          startDate={editingSchedule?.start_date ?? viewDate}
+          endDate={editingSchedule?.end_date ?? viewDate}
+          schedule={editingSchedule}
+          onClose={() => {
+            setShowScheduleModal(false);
+            setEditingSchedule(null);
+          }}
+          onSave={async () => {
+            await loadSchedules();
+            setShowScheduleModal(false);
+            setEditingSchedule(null);
+          }}
+        />
+      )}
     </div>
   );
 }
