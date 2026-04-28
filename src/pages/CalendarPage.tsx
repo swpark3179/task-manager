@@ -29,6 +29,10 @@ import "./Pages.css";
 
 const BAR_HEIGHT = 16;
 const BAR_GAP = 2;
+// Combined cap on schedules + tasks displayed in a single calendar cell.
+// Anything beyond this is collapsed into a single "+N" indicator so cells
+// stay legible when a day has many items.
+const MAX_VISIBLE_PER_CELL = 3;
 
 type ScheduleBar = {
   schedule: Schedule;
@@ -37,6 +41,11 @@ type ScheduleBar = {
   lane: number;
   isActualStart: boolean;
   isActualEnd: boolean;
+};
+
+type WeekBarsResult = {
+  visibleBars: ScheduleBar[];
+  hiddenBars: ScheduleBar[];
 };
 
 type ScheduleModalRange = {
@@ -243,7 +252,7 @@ export default function CalendarPage() {
   };
 
   // Compute schedule bars with lane assignment for each week
-  const computeWeekBars = (week: (Date | null)[]): ScheduleBar[] => {
+  const computeWeekBars = (week: (Date | null)[]): WeekBarsResult => {
     const scheduleMap = new Map<string, Schedule>();
     for (const d of week) {
       if (!d) continue;
@@ -291,12 +300,19 @@ export default function CalendarPage() {
 
     // Greedy lane assignment
     const laneEnd: number[] = [];
-    return items.map((item) => {
+    const allBars: ScheduleBar[] = items.map((item) => {
       let lane = 0;
       while (lane < laneEnd.length && laneEnd[lane] >= item.startCol) lane++;
       laneEnd[lane] = item.endCol;
       return { ...item, lane };
     });
+
+    // Cap visible lanes so that schedule bars never exceed MAX_VISIBLE_PER_CELL.
+    // Bars assigned to lanes beyond the cap are kept aside and surfaced as part
+    // of the per-cell overflow indicator instead of being rendered.
+    const visibleBars = allBars.filter((b) => b.lane < MAX_VISIBLE_PER_CELL);
+    const hiddenBars = allBars.filter((b) => b.lane >= MAX_VISIBLE_PER_CELL);
+    return { visibleBars, hiddenBars };
   };
 
   const handleMouseDown = (dateStr: string, e: React.MouseEvent) => {
@@ -597,7 +613,7 @@ export default function CalendarPage() {
           onAnimationEnd={() => setSlideDirection(null)}
         >
           {weeks.map((week, wIdx) => {
-            const bars = computeWeekBars(week);
+            const { visibleBars: bars, hiddenBars } = computeWeekBars(week);
             const laneCount = bars.reduce((m, b) => Math.max(m, b.lane + 1), 0);
             const laneAreaHeight = laneCount * (BAR_HEIGHT + BAR_GAP);
 
@@ -610,6 +626,22 @@ export default function CalendarPage() {
               }
               return maxLane === -1 ? 0 : (maxLane + 1) * (BAR_HEIGHT + BAR_GAP);
             });
+
+            // Number of schedule lanes occupying each cell (capped) and the count of
+            // schedules that pass through each cell but were dropped because they
+            // exceeded the lane cap.
+            const perCellVisibleScheduleCount: number[] = week.map((_, cIdx) =>
+              bars.reduce(
+                (n, b) => (cIdx >= b.startCol && cIdx <= b.endCol ? n + 1 : n),
+                0,
+              ),
+            );
+            const perCellHiddenScheduleCount: number[] = week.map((_, cIdx) =>
+              hiddenBars.reduce(
+                (n, b) => (cIdx >= b.startCol && cIdx <= b.endCol ? n + 1 : n),
+                0,
+              ),
+            );
 
             return (
               <div
@@ -634,6 +666,16 @@ export default function CalendarPage() {
                   const isSaturday = dayOfWeek === 6;
                   const tasks = (cellData?.tasks || []).filter(t => !t.is_snapshot);
 
+                  // Combined display cap: schedules occupy lane slots first, tasks
+                  // fill the remainder, and any leftover items collapse into a
+                  // single "+N" indicator so cells stay readable.
+                  const lanesAtCell = perCellVisibleScheduleCount[cIdx];
+                  const hiddenSchedulesAtCell = perCellHiddenScheduleCount[cIdx];
+                  const taskSlots = Math.max(0, MAX_VISIBLE_PER_CELL - lanesAtCell);
+                  const visibleTasks = tasks.slice(0, taskSlots);
+                  const overflowCount =
+                    hiddenSchedulesAtCell + Math.max(0, tasks.length - visibleTasks.length);
+
                   return (
                     <div
                       key={dateStr}
@@ -648,9 +690,9 @@ export default function CalendarPage() {
                     >
                       <span className="calendar-cell-date">{date.getDate()}</span>
                       <div className="calendar-cell-body">
-                        {tasks.length > 0 && (
+                        {(visibleTasks.length > 0 || overflowCount > 0) && (
                           <div className="calendar-cell-tasks">
-                            {tasks.slice(0, 3).map((task) => {
+                            {visibleTasks.map((task) => {
                               const catColor = getCategoryColor(task.category_id);
                               return (
                                 <div
@@ -672,7 +714,7 @@ export default function CalendarPage() {
                                 </div>
                               );
                             })}
-                            {tasks.length > 3 && (
+                            {overflowCount > 0 && (
                               <div
                                 className="calendar-task-more"
                                 onClick={(e) => {
@@ -680,7 +722,7 @@ export default function CalendarPage() {
                                   handleCellClick(dateStr);
                                 }}
                               >
-                                +{tasks.length - 3}
+                                +{overflowCount}
                               </div>
                             )}
                           </div>
