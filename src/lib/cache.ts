@@ -155,6 +155,9 @@ export async function updateTaskInAllCaches(taskId: string, updates: Partial<Tas
       if (modified) {
         entry.data = newTasks;
         await cursor.update(entry);
+        // CACHE_TTL.tasks is Infinity, so memory entries are sticky — keep
+        // them in sync with IDB or readers will see stale data.
+        memoryCache.set(`tasks:${cursor.key as string}`, entry);
       }
 
       cursor = await cursor.continue();
@@ -181,6 +184,9 @@ export async function removeTaskFromAllCaches(taskId: string): Promise<void> {
 
       if (entry.data.length !== initialLength) {
         await cursor.update(entry);
+        // CACHE_TTL.tasks is Infinity, so memory entries are sticky — keep
+        // them in sync with IDB or readers will see stale data.
+        memoryCache.set(`tasks:${cursor.key as string}`, entry);
       }
 
       cursor = await cursor.continue();
@@ -248,6 +254,7 @@ export async function updateTaskInCache(taskId: string, updates: Partial<Task>):
       if (modified) {
         entry.data = newTasks;
         await cursor.update(entry);
+        memoryCache.set(`tasks:${cursor.key as string}`, entry);
         break;
       }
 
@@ -276,6 +283,7 @@ export async function removeTaskFromCache(taskId: string): Promise<void> {
 
       if (entry.data.length !== initialLength) {
         await cursor.update(entry);
+        memoryCache.set(`tasks:${cursor.key as string}`, entry);
       }
 
       cursor = await cursor.continue();
