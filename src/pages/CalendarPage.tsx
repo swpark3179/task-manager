@@ -18,9 +18,10 @@ import {
   formatMonthYear,
   getTodayString,
 } from "../utils/dateUtils";
-import type { CalendarCellData, Category, Schedule } from "../types";
+import type { CalendarCellData, Category, DailyTaskSnapshot, Schedule } from "../types";
 import { buildTaskTree } from "../utils/taskUtils";
 import { getCalendarFromMemoryCacheSync } from "../lib/cache";
+import { v4 as uuidv4 } from "uuid";
 import TaskInput from "../components/tasks/TaskInput";
 import TaskTree from "../components/tasks/TaskTree";
 import ScheduleModal from "../components/schedules/ScheduleModal";
@@ -1061,6 +1062,64 @@ export default function CalendarPage() {
                         setCalendarData(freshData);
                       };
 
+                      const handleAddChild = async (parentId: string, title: string) => {
+                        const targetDate = selectedDate;
+                        if (!targetDate) return;
+                        // Optimistic insert so the new subtask shows up immediately
+                        // without waiting for the network round-trip.
+                        const newId = uuidv4();
+                        const optimisticEntry: DailyTaskSnapshot = {
+                          id: newId,
+                          user_id: "",
+                          task_id: newId,
+                          snapshot_date: targetDate,
+                          status: "pending",
+                          created_at: new Date().toISOString(),
+                          title,
+                          parent_id: parentId,
+                          category_id: null,
+                        };
+                        setCalendarData((prev) => {
+                          const idx = prev.findIndex((c) => c.date === targetDate);
+                          if (idx === -1) {
+                            return [
+                              ...prev,
+                              {
+                                date: targetDate,
+                                tasks: [optimisticEntry],
+                                schedules: [],
+                                summary: { total: 1, completed: 0, inProgress: 0, pending: 1, discarded: 0 },
+                              },
+                            ];
+                          }
+                          const next = prev.slice();
+                          const cell = next[idx];
+                          next[idx] = {
+                            ...cell,
+                            tasks: [...cell.tasks, optimisticEntry],
+                            summary: {
+                              ...cell.summary,
+                              total: cell.summary.total + 1,
+                              pending: cell.summary.pending + 1,
+                            },
+                          };
+                          return next;
+                        });
+                        try {
+                          await createTask({ id: newId, title, parent_id: parentId, created_date: targetDate });
+                          await refreshCalendar();
+                        } catch (e) {
+                          console.error("Failed to add child task", e);
+                          setCalendarData((prev) =>
+                            prev.map((c) =>
+                              c.date === targetDate
+                                ? { ...c, tasks: c.tasks.filter((t) => t.task_id !== newId) }
+                                : c,
+                            ),
+                          );
+                        }
+                      };
+
                       return (
                         <TaskTree
                           tasks={displayRoots}
@@ -1077,8 +1136,15 @@ export default function CalendarPage() {
                               console.error("Failed to update task", e);
                             }
                           }}
-                          onAddChild={() => {}}
-                          onSaveDescription={() => {}}
+                          onAddChild={handleAddChild}
+                          onSaveDescription={async (taskId, description) => {
+                            try {
+                              await updateTask(taskId, { description });
+                              await refreshCalendar();
+                            } catch (e) {
+                              console.error("Failed to save description", e);
+                            }
+                          }}
                           showAddInput={false}
                         />
                       );
