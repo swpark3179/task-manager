@@ -313,10 +313,21 @@ export async function getTaskFromCache(taskId: string): Promise<Task | null> {
 // =============================================
 
 
+async function listKeys(storeName: string): Promise<string[]> {
+  try {
+    const db = await getDB();
+    const keys = await db.getAllKeys(storeName);
+    return keys.map((k) => String(k));
+  } catch {
+    return [];
+  }
+}
+
 export const taskCache = {
   get: (date: string) => getCached<Task[]>('tasks', date, CACHE_TTL.tasks),
   set: (date: string, tasks: Task[]) => setCache('tasks', date, tasks),
   invalidate: (date?: string) => invalidateCache('tasks', date),
+  listDates: () => listKeys('tasks'),
   updateTask: async (date: string, taskId: string, updates: Partial<Task>) => {
     const tasks = await getCached<Task[]>('tasks', date, 0);
     if (tasks) {
@@ -370,6 +381,7 @@ export const calendarCache = {
   set: (yearMonth: string, data: CalendarCellData[]) =>
     setCache('calendar', yearMonth, data),
   invalidate: (yearMonth?: string) => invalidateCache('calendar', yearMonth),
+  listMonths: () => listKeys('calendar'),
 };
 
 // =============================================

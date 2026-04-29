@@ -49,6 +49,16 @@ async function withSyncStatus<T>(operation: () => Promise<T>): Promise<T> {
 
 const RETRY_DELAYS_MS = [2000, 4000, 8000, 16000];
 let inFlightSyncs = 0;
+const drainWaiters: Array<() => void> = [];
+
+function notifyDrained() {
+  // Snapshot waiters and clear the queue before invoking, so a waiter that
+  // re-registers from its callback gets a fresh notification (not this one).
+  const waiters = drainWaiters.splice(0, drainWaiters.length);
+  for (const w of waiters) {
+    try { w(); } catch { /* ignore */ }
+  }
+}
 
 function isTransientError(err: unknown): boolean {
   // Treat anything without a Supabase 4xx response as transient.
@@ -69,6 +79,9 @@ function runBackgroundSync(promiseFactory: () => Promise<void>) {
 
   const finalize = (ok: boolean, err?: unknown) => {
     inFlightSyncs = Math.max(0, inFlightSyncs - 1);
+    if (inFlightSyncs === 0) {
+      notifyDrained();
+    }
     if (inFlightSyncs > 0) {
       // Other syncs still pending — let them drive the final status.
       return;
@@ -94,6 +107,33 @@ function runBackgroundSync(promiseFactory: () => Promise<void>) {
   };
 
   attempt(0);
+}
+
+export function getInFlightSyncCount(): number {
+  return inFlightSyncs;
+}
+
+// Resolves once all in-flight optimistic background syncs have settled, so
+// callers (e.g. performFullSync) can avoid reading stale server state and
+// clobbering local-only changes that haven't been pushed yet. Resolves
+// immediately if nothing is in flight; falls back to a timeout so a stuck
+// sync can't block full sync forever.
+export function waitForBackgroundSyncs(timeoutMs: number = 30000): Promise<void> {
+  if (inFlightSyncs === 0) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let done = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const handler = () => {
+      if (done) return;
+      done = true;
+      if (timer !== null) clearTimeout(timer);
+      const idx = drainWaiters.indexOf(handler);
+      if (idx >= 0) drainWaiters.splice(idx, 1);
+      resolve();
+    };
+    timer = setTimeout(handler, timeoutMs);
+    drainWaiters.push(handler);
+  });
 }
 
 // =============================================
@@ -767,6 +807,7 @@ export async function createCategory(name: string, color?: string): Promise<Cate
       .single();
 
     if (error) throw error;
+    await categoryCache.invalidate();
     return data;
   });
 }
@@ -779,6 +820,7 @@ export async function updateCategory(id: string, updates: { name?: string; color
       .eq('id', id);
 
     if (error) throw error;
+    await categoryCache.invalidate();
   });
 }
 
@@ -790,5 +832,6 @@ export async function deleteCategory(id: string): Promise<void> {
       .eq('id', id);
 
     if (error) throw error;
+    await categoryCache.invalidate();
   });
 }
