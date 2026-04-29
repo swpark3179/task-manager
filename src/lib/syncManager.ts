@@ -1,8 +1,9 @@
 import { supabase } from './supabase';
-import { taskCache, calendarCache, categoryCache, scheduleCache, clearAllCaches } from './cache';
+import { taskCache, calendarCache, categoryCache, scheduleCache } from './cache';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { getTodayString } from '../utils/dateUtils';
 import { rescheduleAll } from './notifications';
+import { waitForBackgroundSyncs } from './database';
 import type { Task, CalendarCellData, TaskStatusSummary } from '../types';
 
 // =============================================
@@ -85,6 +86,11 @@ async function getCurrentUserId(): Promise<string> {
 export async function performFullSync(): Promise<void> {
   setSyncStatus('syncing');
   try {
+    // 낙관적 업데이트로 시작된 백그라운드 푸시가 끝나길 기다린다.
+    // 그렇지 않으면 서버에서 옛 데이터를 읽어와 로컬 변경분을 덮어쓰는
+    // 레이스가 발생할 수 있다.
+    await waitForBackgroundSyncs();
+
     const userId = await getCurrentUserId();
 
     // 날짜 범위: ±3개월
@@ -96,9 +102,6 @@ export async function performFullSync(): Promise<void> {
     rangeEnd.setMonth(rangeEnd.getMonth() + 3);
     const startDate = rangeStart.toISOString().split('T')[0];
     const endDate = rangeEnd.toISOString().split('T')[0];
-
-    // 캐시 초기화
-    await clearAllCaches();
 
     // 1. Tasks 동기화 (범위 내 생성된 태스크)
     const { data: tasks, error: tasksError } = await supabase
@@ -174,9 +177,20 @@ export async function performFullSync(): Promise<void> {
       }
     }
 
-    // 날짜별 캐시 저장
+    // 날짜별 캐시 저장 (서버가 권한 있는 출처: 동기 범위 내에서 그대로 반영)
     for (const [date, dateTasks] of tasksByDate.entries()) {
       await taskCache.set(date, dateTasks);
+    }
+
+    // 동기 범위 내에 캐시는 있는데 서버에는 없는 날짜(= 모든 태스크가
+    // 다른 곳으로 옮겨졌거나 삭제됨)는 캐시를 비워서 UI에 잔재가 남지
+    // 않도록 한다. 범위 밖 캐시 항목은 손대지 않는다.
+    const cachedTaskDates = await taskCache.listDates();
+    for (const date of cachedTaskDates) {
+      if (date < startDate || date > endDate) continue;
+      if (!tasksByDate.has(date)) {
+        await taskCache.set(date, []);
+      }
     }
 
     // 3. Categories 동기화
