@@ -378,44 +378,61 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
   return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
 
-    // Get incomplete tasks for the fromDate
-    const { data: incompleteTasks, error } = await supabase
+    // Fetch every task on fromDate so we can reason about subtrees as a whole.
+    // A subtree is rolled over only when at least one node has been started
+    // (status='in_progress'); pure-pending subtrees stay on their original
+    // date so untouched tasks don't pile up day after day.
+    const { data: dayTasks, error } = await supabase
       .from('tasks')
       .select('*')
       .eq('user_id', userId)
-      .eq('created_date', fromDate)
-      .in('status', ['pending', 'in_progress']);
+      .eq('created_date', fromDate);
 
     if (error) throw error;
-    if (!incompleteTasks || incompleteTasks.length === 0) return 0;
+    if (!dayTasks || dayTasks.length === 0) return 0;
 
-    // Find root tasks that need rollover (including those with incomplete children)
-    const allTaskIds = new Set(incompleteTasks.map((t: any) => t.id));
-
-    // Also fetch completed children of incomplete parents
-    const parentIds = incompleteTasks.filter((t: any) => !t.parent_id).map((t: any) => t.id);
-    if (parentIds.length > 0) {
-      const { data: childTasks } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('user_id', userId)
-        .in('parent_id', parentIds)
-        .eq('created_date', fromDate);
-
-      if (childTasks) {
-        for (const child of childTasks) {
-          allTaskIds.add(child.id);
-        }
+    const childrenByParent = new Map<string, any[]>();
+    for (const t of dayTasks) {
+      if (t.parent_id) {
+        const arr = childrenByParent.get(t.parent_id) ?? [];
+        arr.push(t);
+        childrenByParent.set(t.parent_id, arr);
       }
     }
 
-    // Create snapshots for all tasks being rolled over
-    const snapshots = incompleteTasks.map((t: any) => ({
-      user_id: userId,
-      task_id: t.id,
-      snapshot_date: fromDate,
-      status: t.status,
-    }));
+    const subtreeHasProgress = (taskId: string, status: string): boolean => {
+      if (status === 'in_progress') return true;
+      const children = childrenByParent.get(taskId) ?? [];
+      return children.some(c => subtreeHasProgress(c.id, c.status));
+    };
+
+    const allTaskIds = new Set<string>();
+    const snapshots: { user_id: string; task_id: string; snapshot_date: string; status: string }[] = [];
+
+    const collect = (task: any) => {
+      allTaskIds.add(task.id);
+      if (task.status === 'pending' || task.status === 'in_progress') {
+        snapshots.push({
+          user_id: userId,
+          task_id: task.id,
+          snapshot_date: fromDate,
+          status: task.status,
+        });
+      }
+      const children = childrenByParent.get(task.id) ?? [];
+      for (const c of children) collect(c);
+    };
+
+    // Walk root tasks; a root rolls over only if its subtree has progress and
+    // it isn't already terminal (completed/discarded).
+    for (const t of dayTasks) {
+      if (t.parent_id) continue;
+      if (t.status === 'completed' || t.status === 'discarded') continue;
+      if (!subtreeHasProgress(t.id, t.status)) continue;
+      collect(t);
+    }
+
+    if (allTaskIds.size === 0) return 0;
 
     const idsToUpdate = Array.from(allTaskIds);
     const promises: Promise<any>[] = [];
