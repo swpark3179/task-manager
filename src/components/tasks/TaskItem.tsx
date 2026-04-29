@@ -5,6 +5,7 @@ import TaskCheckbox from './TaskCheckbox';
 import TaskTree from './TaskTree';
 import TaskDetail from './TaskDetail';
 import { hasChildren, getEffectiveStatus } from '../../utils/taskUtils';
+import { formatShortDate } from '../../utils/dateUtils';
 import './Tasks.css';
 
 interface TaskItemProps {
@@ -35,6 +36,12 @@ export default function TaskItem({
   const isCompleted = effectiveStatus === 'completed';
   const isDiscarded = effectiveStatus === 'discarded';
 
+  // After a rollover, created_date moves to the new day while created_at keeps
+  // the original timestamp. Show the original registration day so the user can
+  // tell at a glance when the task was first added.
+  const originalDate = task.created_at?.slice(0, 10);
+  const showOriginalDate = !!originalDate && originalDate !== task.created_date;
+
 
   return (
     <div
@@ -60,6 +67,14 @@ export default function TaskItem({
           {task.low_priority && (
             <span style={{ fontSize: '10px', backgroundColor: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-muted)' }}>
               낮음
+            </span>
+          )}
+          {showOriginalDate && (
+            <span
+              className="task-item-original-date"
+              title={`등록일: ${originalDate}`}
+            >
+              등록 {formatShortDate(originalDate)}
             </span>
           )}
 
