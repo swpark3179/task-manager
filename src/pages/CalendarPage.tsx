@@ -5,12 +5,6 @@ import { useRubberBandScroll } from '../hooks/useRubberBandScroll';
 import {
   fetchCalendarData,
   fetchCategories,
-  createTask,
-  updateTask,
-  completeTask,
-  uncompleteTask,
-  discardTask,
-  undiscardTask,
 } from "../lib/database";
 import {
   getMonthCalendarGrid,
@@ -18,15 +12,10 @@ import {
   formatMonthYear,
   getTodayString,
 } from "../utils/dateUtils";
-import type { CalendarCellData, Category, DailyTaskSnapshot, Schedule } from "../types";
-import { buildTaskTree } from "../utils/taskUtils";
+import type { CalendarCellData, Category, Schedule } from "../types";
 import { getCalendarFromMemoryCacheSync } from "../lib/cache";
-import { v4 as uuidv4 } from "uuid";
-import TaskInput from "../components/tasks/TaskInput";
-import TaskTree from "../components/tasks/TaskTree";
 import ScheduleModal from "../components/schedules/ScheduleModal";
-import ScheduleSection from "../components/schedules/ScheduleSection";
-import type { Task } from "../types";
+import DayView from "../components/day/DayView";
 import { useSyncStatus } from "../components/common/SyncIndicator";
 
 import { getContrastColor } from "../utils/colorUtils";
@@ -79,7 +68,6 @@ export default function CalendarPage() {
   });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [viewMode, setViewMode] = useState<"tree" | "leaf">("tree");
   const syncStatus = useSyncStatus();
 
   // Drag selection state
@@ -524,18 +512,8 @@ export default function CalendarPage() {
     }
   };
 
-  const openScheduleBar = (schedule: Schedule) => {
-    setSelectedSchedule(schedule);
-    setScheduleModalRange(normalizeDateRange(schedule.start_date, schedule.end_date));
-    setDragStart(null);
-    setDragEnd(null);
-    setIsDragging(false);
-    setShowScheduleModal(true);
-  };
-
   const closeDayModal = () => {
     setSelectedDate(null);
-    setViewMode("tree");
     dayModalDragOffsetRef.current = 0;
     setDayModalDragOffset(0);
     setIsDayModalDragging(false);
@@ -571,11 +549,6 @@ export default function CalendarPage() {
     setDayModalDragOffset(0);
     if (shouldClose) closeDayModal();
   };
-
-  const selectedCellSchedules = useMemo(() => {
-    if (!selectedDate) return [] as Schedule[];
-    return getCellData(selectedDate)?.schedules ?? [];
-  }, [selectedDate, calendarData]);
 
   return (
     <div className="page calendar-page" {...swipeHandlers}>
@@ -912,268 +885,22 @@ export default function CalendarPage() {
                     (go)
                   </span>
                 </h2>
-                <div style={{ display: "flex", gap: "4px" }}>
-                  <button
-                    className={`btn btn-sm ${viewMode === "tree" ? "btn-primary" : "btn-ghost"}`}
-                    onClick={() => setViewMode("tree")}
-                    title="최상위 작업"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <line x1="8" y1="6" x2="21" y2="6"></line>
-                      <line x1="8" y1="12" x2="21" y2="12"></line>
-                      <line x1="8" y1="18" x2="21" y2="18"></line>
-                      <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                      <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                      <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                    </svg>
-                  </button>
-                  <button
-                    className={`btn btn-sm ${viewMode === "leaf" ? "btn-primary" : "btn-ghost"}`}
-                    onClick={() => setViewMode("leaf")}
-                    title="최하위 작업"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <line x1="3" y1="6" x2="21" y2="6"></line>
-                      <line x1="3" y1="12" x2="21" y2="12"></line>
-                      <line x1="3" y1="18" x2="21" y2="18"></line>
-                    </svg>
-                  </button>
-                </div>
               </div>
 
               <div
                 ref={modalBodyRef}
                 className="modal-body-scroll"
-                style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}
+                style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }}
               >
-                {/* 일정 섹션 */}
-                <section className="modal-section">
-                  <div className="modal-section-header">
-                    <h3 className="modal-section-title">일정</h3>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => {
-                        setSelectedSchedule(null);
-                        setScheduleModalRange(normalizeDateRange(selectedDate, selectedDate));
-                        setDragStart(null);
-                        setDragEnd(null);
-                        setShowScheduleModal(true);
-                      }}
-                    >
-                      + 일정 등록
-                    </button>
-                  </div>
-                  <ScheduleSection
-                    schedules={selectedCellSchedules}
-                    onEdit={(s) => openScheduleBar(s)}
-                    emptyText="이 날짜에 걸쳐있는 일정이 없습니다."
-                  />
-                </section>
-
-                {/* 작업 섹션 */}
-                <section className="modal-section">
-                  <div className="modal-section-header">
-                    <h3 className="modal-section-title">작업</h3>
-                  </div>
-                  <div className="modal-task-list">
-                    {(() => {
-                      const allTasks = (getCellData(selectedDate)?.tasks || []).filter(t => !t.is_snapshot);
-
-                      // Remove duplicates based on task_id
-                      const uniqueTasksMap = new Map();
-                      for (const t of allTasks) {
-                        if (!uniqueTasksMap.has(t.task_id)) {
-                          uniqueTasksMap.set(t.task_id, t);
-                        }
-                      }
-                      const uniqueTasks = Array.from(uniqueTasksMap.values());
-
-                      let displayTasks = uniqueTasks;
-                      if (viewMode === "tree") {
-                        displayTasks = uniqueTasks.filter((t) => !t.parent_id);
-                      } else {
-                        const parentIds = new Set(
-                          uniqueTasks.map((t) => t.parent_id).filter(Boolean),
-                        );
-                        displayTasks = uniqueTasks.filter(
-                          (t) => !parentIds.has(t.task_id),
-                        );
-                      }
-
-                      if (displayTasks.length === 0) {
-                        return (
-                          <p
-                            style={{
-                              color: "var(--text-muted)",
-                              textAlign: "center",
-                              padding: "16px 0",
-                              margin: 0,
-                            }}
-                          >
-                            등록된 작업이 없습니다.
-                          </p>
-                        );
-                      }
-
-                      // Map to Task array
-                      const mockTasks = uniqueTasks.map(t => ({
-                        id: t.task_id,
-                        user_id: t.user_id,
-                        parent_id: t.parent_id || null,
-                        category_id: t.category_id || null,
-                        title: t.title || "제목 없음",
-                        description: null,
-                        status: t.status,
-                        low_priority: false,
-                        created_date: t.snapshot_date,
-                        completed_at: null,
-                        discarded_at: null,
-                        sort_order: 0,
-                        created_at: t.created_at,
-                        updated_at: t.created_at,
-                        is_snapshot: false,
-                      } as Task));
-
-                      // build tree
-                      const treeRoots = buildTaskTree(mockTasks);
-                      const displayRoots = viewMode === "tree" ? treeRoots : mockTasks.filter(t => displayTasks.some(dt => dt.task_id === t.id));
-
-                      const refreshCalendar = async () => {
-                        const freshData = await fetchCalendarData(year, month);
-                        setCalendarData(freshData);
-                      };
-
-                      const handleAddChild = async (parentId: string, title: string) => {
-                        const targetDate = selectedDate;
-                        if (!targetDate) return;
-                        // Optimistic insert so the new subtask shows up immediately
-                        // without waiting for the network round-trip.
-                        const newId = uuidv4();
-                        const optimisticEntry: DailyTaskSnapshot = {
-                          id: newId,
-                          user_id: "",
-                          task_id: newId,
-                          snapshot_date: targetDate,
-                          status: "pending",
-                          created_at: new Date().toISOString(),
-                          title,
-                          parent_id: parentId,
-                          category_id: null,
-                        };
-                        setCalendarData((prev) => {
-                          const idx = prev.findIndex((c) => c.date === targetDate);
-                          if (idx === -1) {
-                            return [
-                              ...prev,
-                              {
-                                date: targetDate,
-                                tasks: [optimisticEntry],
-                                schedules: [],
-                                summary: { total: 1, completed: 0, inProgress: 0, pending: 1, discarded: 0 },
-                              },
-                            ];
-                          }
-                          const next = prev.slice();
-                          const cell = next[idx];
-                          next[idx] = {
-                            ...cell,
-                            tasks: [...cell.tasks, optimisticEntry],
-                            summary: {
-                              ...cell.summary,
-                              total: cell.summary.total + 1,
-                              pending: cell.summary.pending + 1,
-                            },
-                          };
-                          return next;
-                        });
-                        try {
-                          await createTask({ id: newId, title, parent_id: parentId, created_date: targetDate });
-                          await refreshCalendar();
-                        } catch (e) {
-                          console.error("Failed to add child task", e);
-                          setCalendarData((prev) =>
-                            prev.map((c) =>
-                              c.date === targetDate
-                                ? { ...c, tasks: c.tasks.filter((t) => t.task_id !== newId) }
-                                : c,
-                            ),
-                          );
-                        }
-                      };
-
-                      return (
-                        <TaskTree
-                          tasks={displayRoots}
-                          onComplete={async (id) => { await completeTask(id); await refreshCalendar(); }}
-                          onUncomplete={async (id) => { await uncompleteTask(id); await refreshCalendar(); }}
-                          onDiscard={async (id) => { await discardTask(id); await refreshCalendar(); }}
-                          onUndiscard={async (id) => { await undiscardTask(id); await refreshCalendar(); }}
-                          onDelete={() => {}}
-                          onUpdateSettings={async (id, updates) => {
-                            try {
-                              await updateTask(id, updates);
-                              await refreshCalendar();
-                            } catch (e) {
-                              console.error("Failed to update task", e);
-                            }
-                          }}
-                          onAddChild={handleAddChild}
-                          onSaveDescription={async (taskId, description) => {
-                            try {
-                              await updateTask(taskId, { description });
-                              await refreshCalendar();
-                            } catch (e) {
-                              console.error("Failed to save description", e);
-                            }
-                          }}
-                          showAddInput={false}
-                        />
-                      );
-                    })()}
-                  </div>
-                </section>
-              </div>
-
-              {selectedDate === today && (
-                <div
-                  style={{
-                    marginTop: "12px",
-                    borderTop: "1px solid var(--border-light)",
-                    paddingTop: "12px",
+                <DayView
+                  key={selectedDate}
+                  date={selectedDate}
+                  isToday={selectedDate === today}
+                  onMutate={() => {
+                    void loadCalendarData();
                   }}
-                >
-                  <TaskInput
-                    onAdd={async (title) => {
-                      try {
-                        await createTask({ title, created_date: selectedDate });
-                        const freshData = await fetchCalendarData(year, month);
-                        setCalendarData(freshData);
-                      } catch (e) {
-                        console.error("Failed to create task", e);
-                      }
-                    }}
-                  />
-                </div>
-              )}
+                />
+              </div>
             </div>
           </div>
         )}
