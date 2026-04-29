@@ -393,20 +393,27 @@ async function rescheduleAllPerSchedule(enabled: boolean): Promise<void> {
 }
 
 let rescheduleInFlight: Promise<void> | null = null;
+let rescheduleQueued = false;
 
 /**
  * 데일리 요약 + 모든 per-schedule 알림을 재예약합니다.
  * 권한이 없으면 조용히 종료합니다.
- * 동시 호출되면 같은 promise를 공유합니다.
+ * 동시 호출 시 실행 중인 작업이 끝난 뒤 최신 설정으로 한 번 더 실행합니다.
  */
 export function rescheduleAll(): Promise<void> {
-  if (rescheduleInFlight) return rescheduleInFlight;
+  if (rescheduleInFlight) {
+    rescheduleQueued = true;
+    return rescheduleInFlight;
+  }
   rescheduleInFlight = (async () => {
     try {
-      if (!(await hasPermission())) return;
-      const settings = await getNotificationSettings();
-      await rescheduleAllPerSchedule(settings.perScheduleEnabled);
-      await rescheduleDailySummaries(settings);
+      do {
+        rescheduleQueued = false;
+        if (!(await hasPermission())) return;
+        const settings = await getNotificationSettings();
+        await rescheduleAllPerSchedule(settings.perScheduleEnabled);
+        await rescheduleDailySummaries(settings);
+      } while (rescheduleQueued);
     } catch (err) {
       console.error('[notifications] rescheduleAll failed:', err);
     } finally {

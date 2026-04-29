@@ -7,6 +7,10 @@ import {
   fetchCategories,
   createTask,
   updateTask,
+  completeTask,
+  uncompleteTask,
+  discardTask,
+  undiscardTask,
 } from "../lib/database";
 import {
   getMonthCalendarGrid,
@@ -1045,26 +1049,30 @@ export default function CalendarPage() {
                         sort_order: 0,
                         created_at: t.created_at,
                         updated_at: t.created_at,
-                        is_snapshot: true // keep true to disable checkbox
+                        is_snapshot: false,
                       } as Task));
 
                       // build tree
                       const treeRoots = buildTaskTree(mockTasks);
                       const displayRoots = viewMode === "tree" ? treeRoots : mockTasks.filter(t => displayTasks.some(dt => dt.task_id === t.id));
 
+                      const refreshCalendar = async () => {
+                        const freshData = await fetchCalendarData(year, month);
+                        setCalendarData(freshData);
+                      };
+
                       return (
                         <TaskTree
                           tasks={displayRoots}
-                          onComplete={() => {}}
-                          onUncomplete={() => {}}
-                          onDiscard={() => {}}
-                          onUndiscard={() => {}}
+                          onComplete={async (id) => { await completeTask(id); await refreshCalendar(); }}
+                          onUncomplete={async (id) => { await uncompleteTask(id); await refreshCalendar(); }}
+                          onDiscard={async (id) => { await discardTask(id); await refreshCalendar(); }}
+                          onUndiscard={async (id) => { await undiscardTask(id); await refreshCalendar(); }}
                           onDelete={() => {}}
                           onUpdateSettings={async (id, updates) => {
                             try {
                               await updateTask(id, updates);
-                              const freshData = await fetchCalendarData(year, month);
-                              setCalendarData(freshData);
+                              await refreshCalendar();
                             } catch (e) {
                               console.error("Failed to update task", e);
                             }
