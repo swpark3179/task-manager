@@ -1,6 +1,6 @@
 import type { Schedule, Task } from '../types';
 import { scheduleCache, taskCache } from './cache';
-import { getTodayString } from '../utils/dateUtils';
+import { getDaysAgo, getTodayString } from '../utils/dateUtils';
 
 // =============================================
 // Local Scheduled Notifications
@@ -256,24 +256,53 @@ interface DailySummary {
   firstTitles: string[]; // 본문에 추가할 일부 제목
 }
 
-async function buildDailySummary(date: string): Promise<DailySummary> {
-  const tasks = (await taskCache.get(date)) ?? [];
+async function loadTasksForSummary(date: string, useRemoteFallback: boolean): Promise<Task[]> {
+  if (useRemoteFallback) {
+    try {
+      const { fetchTasksByDate } = await import('./database');
+      // fetchTasksByDate는 캐시 미스 시 Supabase에서 가져와 캐시도 채워줍니다.
+      // tree 형태로 반환되므로 평탄화하여 status 카운팅에 사용합니다.
+      const tree = await fetchTasksByDate(date);
+      return flattenTaskTree(tree);
+    } catch (err) {
+      console.error('[notifications] fetchTasksByDate failed, falling back to cache:', err);
+    }
+  }
+  return (await taskCache.get(date)) ?? [];
+}
+
+function flattenTaskTree(tasks: Task[]): Task[] {
+  const out: Task[] = [];
+  const walk = (list: Task[]) => {
+    for (const t of list) {
+      out.push(t);
+      if (t.children && t.children.length > 0) walk(t.children);
+    }
+  };
+  walk(tasks);
+  return out;
+}
+
+async function buildDailySummary(date: string, useRemoteFallback = false): Promise<DailySummary> {
+  const rawTasks = await loadTasksForSummary(date, useRemoteFallback);
   const schedules = (await scheduleCache.get()) ?? [];
 
   // 해당 날짜에 걸쳐 있는 일정만 필터
   const daySchedules = schedules.filter((s) => s.start_date <= date && s.end_date >= date);
 
+  // is_snapshot(다른 날짜에서 보강 노출된 태스크)은 카운트에서 제외 — 해당 날짜의
+  // "오늘의 할일" 목록에 실제로 잡혀 있는 항목만 집계합니다.
+  const tasks = (rawTasks as Task[]).filter((t) => !t.is_snapshot);
+
   let inProgress = 0;
   let pending = 0;
-  for (const t of tasks as Task[]) {
+  for (const t of tasks) {
     if (t.status === 'in_progress') inProgress++;
     else if (t.status === 'pending') pending++;
   }
-  const total = (tasks as Task[]).filter(
-    (t) => t.status === 'pending' || t.status === 'in_progress'
-  ).length;
+  const total = pending + inProgress;
 
-  const taskTitles = (tasks as Task[])
+  const taskTitles = tasks
     .filter((t) => !t.parent_id && (t.status === 'pending' || t.status === 'in_progress'))
     .slice(0, 2)
     .map((t) => `· ${t.title}`);
@@ -292,8 +321,8 @@ async function buildDailySummary(date: string): Promise<DailySummary> {
 
 function formatSummaryBody(s: DailySummary): string {
   const headerParts: string[] = [];
-  if (s.total > 0) {
-    headerParts.push(`할일 ${s.total}건 (진행중 ${s.inProgress})`);
+  if (s.pending > 0 || s.inProgress > 0) {
+    headerParts.push(`대기 ${s.pending} · 진행 ${s.inProgress}`);
   } else {
     headerParts.push('할일 없음');
   }
@@ -320,6 +349,33 @@ function addDays(date: Date, days: number): Date {
   return d;
 }
 
+/**
+ * 데일리 요약 본문을 만들기 직전에, TodayPage 진입 시와 동일한 로직으로
+ * 지난 날짜의 미완료 작업을 오늘로 이관합니다. 알림 본문이 "진행중 0"
+ * 처럼 비어 보이는 문제를 막기 위함입니다.
+ *
+ * - 대상이 없으면 rolloverTasks 가 즉시 빠지므로 idempotent.
+ * - 실패해도 알림 예약 자체는 계속 진행합니다.
+ */
+async function ensureRolloverBeforeSummary(today: string): Promise<void> {
+  try {
+    const [{ Store }, { rolloverTasks }] = await Promise.all([
+      import('@tauri-apps/plugin-store'),
+      import('./database'),
+    ]);
+    const store = await Store.load('settings.json');
+    const lastDate = await store.get<string>('lastActiveDate');
+    const sevenDaysAgo = getDaysAgo(today, 7);
+    let startDate = sevenDaysAgo;
+    if (lastDate && lastDate < startDate) startDate = lastDate;
+    if (startDate < today) {
+      await rolloverTasks(startDate, today);
+    }
+  } catch (err) {
+    console.error('[notifications] rollover before daily summary failed:', err);
+  }
+}
+
 async function rescheduleDailySummaries(settings: NotificationSettings): Promise<void> {
   const mod = await loadNotifModule();
   if (!mod) return;
@@ -336,6 +392,10 @@ async function rescheduleDailySummaries(settings: NotificationSettings): Promise
   const { hour, minute } = parseHHMM(settings.dailySummaryTime);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const todayStr = formatLocalDate(today);
+
+  // 본문을 만들기 전에 오늘분 롤오버를 먼저 수행해 카운트가 정확하도록 함.
+  await ensureRolloverBeforeSummary(todayStr);
 
   for (let offset = 0; offset < DAILY_SUMMARY_HORIZON_DAYS; offset++) {
     const fireAt = addDays(today, offset);
@@ -345,7 +405,9 @@ async function rescheduleDailySummaries(settings: NotificationSettings): Promise
     const dateStr = formatLocalDate(fireAt);
     let summary: DailySummary;
     try {
-      summary = await buildDailySummary(dateStr);
+      // 오늘분(offset=0)은 롤오버 직후 캐시가 비워졌을 수 있으므로
+      // 원격 폴백으로 정확한 데이터를 읽어옵니다.
+      summary = await buildDailySummary(dateStr, offset === 0);
     } catch {
       summary = {
         date: dateStr,
