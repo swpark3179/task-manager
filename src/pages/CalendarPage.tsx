@@ -5,8 +5,6 @@ import { useRubberBandScroll } from '../hooks/useRubberBandScroll';
 import {
   fetchCalendarData,
   fetchCategories,
-  createTask,
-  updateTask,
 } from "../lib/database";
 import {
   getMonthCalendarGrid,
@@ -15,13 +13,9 @@ import {
   getTodayString,
 } from "../utils/dateUtils";
 import type { CalendarCellData, Category, Schedule } from "../types";
-import { buildTaskTree } from "../utils/taskUtils";
 import { getCalendarFromMemoryCacheSync } from "../lib/cache";
-import TaskInput from "../components/tasks/TaskInput";
-import TaskTree from "../components/tasks/TaskTree";
 import ScheduleModal from "../components/schedules/ScheduleModal";
-import ScheduleSection from "../components/schedules/ScheduleSection";
-import type { Task } from "../types";
+import DayView from "../components/day/DayView";
 import { useSyncStatus } from "../components/common/SyncIndicator";
 
 import { getContrastColor } from "../utils/colorUtils";
@@ -29,6 +23,10 @@ import "./Pages.css";
 
 const BAR_HEIGHT = 16;
 const BAR_GAP = 2;
+// Combined cap on schedules + tasks displayed in a single calendar cell.
+// Anything beyond this is collapsed into a single "+N" indicator so cells
+// stay legible when a day has many items.
+const MAX_VISIBLE_PER_CELL = 3;
 
 type ScheduleBar = {
   schedule: Schedule;
@@ -37,6 +35,11 @@ type ScheduleBar = {
   lane: number;
   isActualStart: boolean;
   isActualEnd: boolean;
+};
+
+type WeekBarsResult = {
+  visibleBars: ScheduleBar[];
+  hiddenBars: ScheduleBar[];
 };
 
 type ScheduleModalRange = {
@@ -65,7 +68,6 @@ export default function CalendarPage() {
   });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [viewMode, setViewMode] = useState<"tree" | "leaf">("tree");
   const syncStatus = useSyncStatus();
 
   // Drag selection state
@@ -92,7 +94,23 @@ export default function CalendarPage() {
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const [animKey, setAnimKey] = useState(0);
 
+  // 년/월 선택 피커
+  const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(year);
+  const yearMonthPickerRef = useRef<HTMLDivElement>(null);
+
   const modalBodyRef = useRubberBandScroll<HTMLDivElement>();
+
+  useEffect(() => {
+    if (!showYearMonthPicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (yearMonthPickerRef.current && !yearMonthPickerRef.current.contains(e.target as Node)) {
+        setShowYearMonthPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showYearMonthPicker]);
 
 
 
@@ -107,6 +125,18 @@ export default function CalendarPage() {
   };
 
   const loadCalendarData = useCallback(async (cancelledRef?: { current: boolean }) => {
+    const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+    const memoryHit = getCalendarFromMemoryCacheSync(yearMonth);
+
+    // 메모리 캐시 히트 시: 스피너 없이 즉시 반영
+    if (memoryHit) {
+      if (!cancelledRef?.current) {
+        setCalendarData(memoryHit);
+        setLoading(false);
+      }
+      return;
+    }
+
     setLoading(true);
     try {
       const data = await fetchCalendarData(year, month, (fresh) => {
@@ -118,6 +148,16 @@ export default function CalendarPage() {
       console.error("Failed to load calendar data:", err);
     } finally {
       if (!cancelledRef?.current) setLoading(false);
+    }
+  }, [year, month]);
+
+  // 월 전환 시 메모리 캐시가 있으면 즉시 표시 (스피너 깜빡임 방지)
+  useEffect(() => {
+    const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+    const memoryHit = getCalendarFromMemoryCacheSync(yearMonth);
+    if (memoryHit) {
+      setCalendarData(memoryHit);
+      setLoading(false);
     }
   }, [year, month]);
 
@@ -151,6 +191,28 @@ export default function CalendarPage() {
       document.body.style.touchAction = '';
     };
   }, [isDragging]);
+
+  // Defensive cleanup: if a pointer is released outside the grid or the window
+  // loses focus mid-drag, force-clear the selection so cells don't stay
+  // highlighted. The grid's own onMouseUp/onMouseLeave already handles the
+  // common path; this guards the rare cases (alt-tab, release on overlay, etc.).
+  useEffect(() => {
+    if (!isDragging && !dragStart && !dragEnd) return;
+    const clearDragState = () => {
+      setIsDragging(false);
+      setDragStart(null);
+      setDragEnd(null);
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') clearDragState();
+    };
+    window.addEventListener('blur', clearDragState);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('blur', clearDragState);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isDragging, dragStart, dragEnd]);
 
   const grid = getMonthCalendarGrid(year, month);
 
@@ -202,12 +264,32 @@ export default function CalendarPage() {
     setMonth(now.getMonth() + 1);
   };
 
+  const handlePickMonth = (targetMonth: number) => {
+    const targetYear = pickerYear;
+    if (targetYear === year && targetMonth === month) {
+      setShowYearMonthPicker(false);
+      return;
+    }
+    const goingForward =
+      targetYear > year || (targetYear === year && targetMonth > month);
+    setSlideDirection(goingForward ? 'right' : 'left');
+    setAnimKey((k) => k + 1);
+    setYear(targetYear);
+    setMonth(targetMonth);
+    setShowYearMonthPicker(false);
+  };
+
+  const toggleYearMonthPicker = () => {
+    setPickerYear(year);
+    setShowYearMonthPicker((v) => !v);
+  };
+
   const getCellData = (dateStr: string): CalendarCellData | undefined => {
     return calendarData.find((c) => c.date === dateStr);
   };
 
   // Compute schedule bars with lane assignment for each week
-  const computeWeekBars = (week: (Date | null)[]): ScheduleBar[] => {
+  const computeWeekBars = (week: (Date | null)[]): WeekBarsResult => {
     const scheduleMap = new Map<string, Schedule>();
     for (const d of week) {
       if (!d) continue;
@@ -255,12 +337,19 @@ export default function CalendarPage() {
 
     // Greedy lane assignment
     const laneEnd: number[] = [];
-    return items.map((item) => {
+    const allBars: ScheduleBar[] = items.map((item) => {
       let lane = 0;
       while (lane < laneEnd.length && laneEnd[lane] >= item.startCol) lane++;
       laneEnd[lane] = item.endCol;
       return { ...item, lane };
     });
+
+    // Cap visible lanes so that schedule bars never exceed MAX_VISIBLE_PER_CELL.
+    // Bars assigned to lanes beyond the cap are kept aside and surfaced as part
+    // of the per-cell overflow indicator instead of being rendered.
+    const visibleBars = allBars.filter((b) => b.lane < MAX_VISIBLE_PER_CELL);
+    const hiddenBars = allBars.filter((b) => b.lane >= MAX_VISIBLE_PER_CELL);
+    return { visibleBars, hiddenBars };
   };
 
   const handleMouseDown = (dateStr: string, e: React.MouseEvent) => {
@@ -270,34 +359,40 @@ export default function CalendarPage() {
     if (target.closest('.calendar-task-item') || target.closest('.calendar-task-more') || target.closest('.calendar-cell-date') || target.closest('.schedule-bar')) {
       return;
     }
-    setIsDragging(true);
+    // Defer isDragging until the pointer actually moves to another cell so a
+    // simple click never visibly highlights the cell as "selected".
     setDragStart(dateStr);
     setDragEnd(dateStr);
   };
 
   const handleMouseEnter = (dateStr: string) => {
-    if (isDragging) {
-      setDragEnd(dateStr);
+    if (!dragStart) return;
+    if (!isDragging && dateStr !== dragStart) {
+      setIsDragging(true);
     }
+    setDragEnd(dateStr);
   };
 
   const handleMouseUp = () => {
     if (isDragging) {
       setIsDragging(false);
       window.getSelection()?.removeAllRanges();
-      if (dragStart && dragEnd) {
-        if (dragStart === dragEnd) {
-          // It's a click, trigger normal cell click
-          handleCellClick(dragStart);
-        } else {
-          // It's a drag, open schedule modal
-          setSelectedSchedule(null);
-          setScheduleModalRange(normalizeDateRange(dragStart, dragEnd));
-          setShowScheduleModal(true);
-          setDragStart(null);
-          setDragEnd(null);
-        }
+      if (dragStart && dragEnd && dragStart !== dragEnd) {
+        // Real multi-cell drag: open schedule modal
+        setSelectedSchedule(null);
+        setScheduleModalRange(normalizeDateRange(dragStart, dragEnd));
+        setShowScheduleModal(true);
+      } else if (dragStart) {
+        // Drag returned to its origin: behave like a normal click
+        handleCellClick(dragStart);
       }
+      setDragStart(null);
+      setDragEnd(null);
+    } else if (dragStart || dragEnd) {
+      // Mouse released without ever starting a drag — clear pending state.
+      // The cell's onClick handler will open the day modal as usual.
+      setDragStart(null);
+      setDragEnd(null);
     }
   };
   const handleTouchStart = (dateStr: string, e: React.TouchEvent) => {
@@ -426,9 +521,8 @@ export default function CalendarPage() {
     setShowScheduleModal(true);
   };
 
-  const closeDayModal = useCallback(() => {
+  const closeDayModal = () => {
     setSelectedDate(null);
-    setViewMode("tree");
     dayModalDragOffsetRef.current = 0;
     setDayModalDragOffset(0);
     setIsDayModalDragging(false);
@@ -480,11 +574,6 @@ export default function CalendarPage() {
     if (shouldClose) closeDayModal();
   };
 
-  const selectedCellSchedules = useMemo(() => {
-    if (!selectedDate) return [] as Schedule[];
-    return getCellData(selectedDate)?.schedules ?? [];
-  }, [selectedDate, calendarData]);
-
   return (
     <div className="page calendar-page" {...swipeHandlers}>
       <div className="page-content">
@@ -503,9 +592,39 @@ export default function CalendarPage() {
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
-          <span className="calendar-month-label">
-            {formatMonthYear(new Date(year, month - 1))}
-          </span>
+          <div className="calendar-month-picker-wrapper" ref={yearMonthPickerRef}>
+            <button className="calendar-month-label" onClick={toggleYearMonthPicker} type="button">
+              {formatMonthYear(new Date(year, month - 1))}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '4px', transform: showYearMonthPicker ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {showYearMonthPicker && (
+              <div className="year-month-picker">
+                <div className="year-month-picker-year-row">
+                  <button type="button" className="year-month-picker-arrow" onClick={() => setPickerYear((y) => y - 1)} aria-label="이전 년도">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                  </button>
+                  <span className="year-month-picker-year">{pickerYear}년</span>
+                  <button type="button" className="year-month-picker-arrow" onClick={() => setPickerYear((y) => y + 1)} aria-label="다음 년도">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+                  </button>
+                </div>
+                <div className="year-month-picker-grid">
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`year-month-picker-month ${pickerYear === year && m === month ? 'active' : ''} ${pickerYear === new Date().getFullYear() && m === new Date().getMonth() + 1 ? 'current' : ''}`}
+                      onClick={() => handlePickMonth(m)}
+                    >
+                      {m}월
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           <button className="calendar-nav-btn" onClick={nextMonth} aria-label="다음 달">
             <svg
               width="18"
@@ -525,6 +644,17 @@ export default function CalendarPage() {
           </button>
         </div>
 
+        <div className="calendar-header-row calendar-header-fixed">
+          {dayLabels.map((day) => (
+            <div
+              key={day}
+              className={`calendar-header-cell ${day === "일" ? "sunday" : ""} ${day === "토" ? "saturday" : ""}`}
+            >
+              {day}
+            </div>
+          ))}
+        </div>
+
         <div
           ref={calendarGridRef}
           key={animKey}
@@ -534,19 +664,8 @@ export default function CalendarPage() {
           onTouchMove={handleTouchMove}
           onAnimationEnd={() => setSlideDirection(null)}
         >
-          <div className="calendar-header-row">
-            {dayLabels.map((day) => (
-              <div
-                key={day}
-                className={`calendar-header-cell ${day === "일" ? "sunday" : ""} ${day === "토" ? "saturday" : ""}`}
-              >
-                {day}
-              </div>
-            ))}
-          </div>
-
           {weeks.map((week, wIdx) => {
-            const bars = computeWeekBars(week);
+            const { visibleBars: bars, hiddenBars } = computeWeekBars(week);
             const laneCount = bars.reduce((m, b) => Math.max(m, b.lane + 1), 0);
             const laneAreaHeight = laneCount * (BAR_HEIGHT + BAR_GAP);
 
@@ -559,6 +678,22 @@ export default function CalendarPage() {
               }
               return maxLane === -1 ? 0 : (maxLane + 1) * (BAR_HEIGHT + BAR_GAP);
             });
+
+            // Number of schedule lanes occupying each cell (capped) and the count of
+            // schedules that pass through each cell but were dropped because they
+            // exceeded the lane cap.
+            const perCellVisibleScheduleCount: number[] = week.map((_, cIdx) =>
+              bars.reduce(
+                (n, b) => (cIdx >= b.startCol && cIdx <= b.endCol ? n + 1 : n),
+                0,
+              ),
+            );
+            const perCellHiddenScheduleCount: number[] = week.map((_, cIdx) =>
+              hiddenBars.reduce(
+                (n, b) => (cIdx >= b.startCol && cIdx <= b.endCol ? n + 1 : n),
+                0,
+              ),
+            );
 
             return (
               <div
@@ -583,6 +718,16 @@ export default function CalendarPage() {
                   const isSaturday = dayOfWeek === 6;
                   const tasks = (cellData?.tasks || []).filter(t => !t.is_snapshot);
 
+                  // Combined display cap: schedules occupy lane slots first, tasks
+                  // fill the remainder, and any leftover items collapse into a
+                  // single "+N" indicator so cells stay readable.
+                  const lanesAtCell = perCellVisibleScheduleCount[cIdx];
+                  const hiddenSchedulesAtCell = perCellHiddenScheduleCount[cIdx];
+                  const taskSlots = Math.max(0, MAX_VISIBLE_PER_CELL - lanesAtCell);
+                  const visibleTasks = tasks.slice(0, taskSlots);
+                  const overflowCount =
+                    hiddenSchedulesAtCell + Math.max(0, tasks.length - visibleTasks.length);
+
                   return (
                     <div
                       key={dateStr}
@@ -597,9 +742,9 @@ export default function CalendarPage() {
                     >
                       <span className="calendar-cell-date">{date.getDate()}</span>
                       <div className="calendar-cell-body">
-                        {tasks.length > 0 && (
+                        {(visibleTasks.length > 0 || overflowCount > 0) && (
                           <div className="calendar-cell-tasks">
-                            {tasks.slice(0, 3).map((task) => {
+                            {visibleTasks.map((task) => {
                               const catColor = getCategoryColor(task.category_id);
                               return (
                                 <div
@@ -621,7 +766,7 @@ export default function CalendarPage() {
                                 </div>
                               );
                             })}
-                            {tasks.length > 3 && (
+                            {overflowCount > 0 && (
                               <div
                                 className="calendar-task-more"
                                 onClick={(e) => {
@@ -629,7 +774,7 @@ export default function CalendarPage() {
                                   handleCellClick(dateStr);
                                 }}
                               >
-                                +{tasks.length - 3}
+                                +{overflowCount}
                               </div>
                             )}
                           </div>
@@ -764,199 +909,22 @@ export default function CalendarPage() {
                     (go)
                   </span>
                 </h2>
-                <div style={{ display: "flex", gap: "4px" }}>
-                  <button
-                    className={`btn btn-sm ${viewMode === "tree" ? "btn-primary" : "btn-ghost"}`}
-                    onClick={() => setViewMode("tree")}
-                    title="최상위 작업"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <line x1="8" y1="6" x2="21" y2="6"></line>
-                      <line x1="8" y1="12" x2="21" y2="12"></line>
-                      <line x1="8" y1="18" x2="21" y2="18"></line>
-                      <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                      <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                      <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                    </svg>
-                  </button>
-                  <button
-                    className={`btn btn-sm ${viewMode === "leaf" ? "btn-primary" : "btn-ghost"}`}
-                    onClick={() => setViewMode("leaf")}
-                    title="최하위 작업"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <line x1="3" y1="6" x2="21" y2="6"></line>
-                      <line x1="3" y1="12" x2="21" y2="12"></line>
-                      <line x1="3" y1="18" x2="21" y2="18"></line>
-                    </svg>
-                  </button>
-                </div>
               </div>
 
               <div
                 ref={modalBodyRef}
                 className="modal-body-scroll"
-                style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}
+                style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }}
               >
-                {/* 일정 섹션 */}
-                <section className="modal-section">
-                  <div className="modal-section-header">
-                    <h3 className="modal-section-title">일정</h3>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => {
-                        setSelectedSchedule(null);
-                        setScheduleModalRange(normalizeDateRange(selectedDate, selectedDate));
-                        setDragStart(null);
-                        setDragEnd(null);
-                        setShowScheduleModal(true);
-                      }}
-                    >
-                      + 일정 등록
-                    </button>
-                  </div>
-                  <ScheduleSection
-                    schedules={selectedCellSchedules}
-                    onEdit={(s) => openScheduleBar(s)}
-                    emptyText="이 날짜에 걸쳐있는 일정이 없습니다."
-                  />
-                </section>
-
-                {/* 작업 섹션 */}
-                <section className="modal-section">
-                  <div className="modal-section-header">
-                    <h3 className="modal-section-title">작업</h3>
-                  </div>
-                  <div className="modal-task-list">
-                    {(() => {
-                      const allTasks = (getCellData(selectedDate)?.tasks || []).filter(t => !t.is_snapshot);
-
-                      // Remove duplicates based on task_id
-                      const uniqueTasksMap = new Map();
-                      for (const t of allTasks) {
-                        if (!uniqueTasksMap.has(t.task_id)) {
-                          uniqueTasksMap.set(t.task_id, t);
-                        }
-                      }
-                      const uniqueTasks = Array.from(uniqueTasksMap.values());
-
-                      let displayTasks = uniqueTasks;
-                      if (viewMode === "tree") {
-                        displayTasks = uniqueTasks.filter((t) => !t.parent_id);
-                      } else {
-                        const parentIds = new Set(
-                          uniqueTasks.map((t) => t.parent_id).filter(Boolean),
-                        );
-                        displayTasks = uniqueTasks.filter(
-                          (t) => !parentIds.has(t.task_id),
-                        );
-                      }
-
-                      if (displayTasks.length === 0) {
-                        return (
-                          <p
-                            style={{
-                              color: "var(--text-muted)",
-                              textAlign: "center",
-                              padding: "16px 0",
-                              margin: 0,
-                            }}
-                          >
-                            등록된 작업이 없습니다.
-                          </p>
-                        );
-                      }
-
-                      // Map to Task array
-                      const mockTasks = uniqueTasks.map(t => ({
-                        id: t.task_id,
-                        user_id: t.user_id,
-                        parent_id: t.parent_id || null,
-                        category_id: t.category_id || null,
-                        title: t.title || "제목 없음",
-                        description: null,
-                        status: t.status,
-                        low_priority: false,
-                        created_date: t.snapshot_date,
-                        completed_at: null,
-                        discarded_at: null,
-                        sort_order: 0,
-                        created_at: t.created_at,
-                        updated_at: t.created_at,
-                        is_snapshot: true // keep true to disable checkbox
-                      } as Task));
-
-                      // build tree
-                      const treeRoots = buildTaskTree(mockTasks);
-                      const displayRoots = viewMode === "tree" ? treeRoots : mockTasks.filter(t => displayTasks.some(dt => dt.task_id === t.id));
-
-                      return (
-                        <TaskTree
-                          tasks={displayRoots}
-                          onComplete={() => {}}
-                          onUncomplete={() => {}}
-                          onDiscard={() => {}}
-                          onUndiscard={() => {}}
-                          onDelete={() => {}}
-                          onUpdateSettings={async (id, updates) => {
-                            try {
-                              await updateTask(id, updates);
-                              const freshData = await fetchCalendarData(year, month);
-                              setCalendarData(freshData);
-                            } catch (e) {
-                              console.error("Failed to update task", e);
-                            }
-                          }}
-                          onAddChild={() => {}}
-                          onSaveDescription={() => {}}
-                          showAddInput={false}
-                        />
-                      );
-                    })()}
-                  </div>
-                </section>
-              </div>
-
-              {selectedDate === today && (
-                <div
-                  style={{
-                    marginTop: "12px",
-                    borderTop: "1px solid var(--border-light)",
-                    paddingTop: "12px",
+                <DayView
+                  key={selectedDate}
+                  date={selectedDate}
+                  isToday={selectedDate === today}
+                  onMutate={() => {
+                    void loadCalendarData();
                   }}
-                >
-                  <TaskInput
-                    onAdd={async (title) => {
-                      try {
-                        await createTask({ title, created_date: selectedDate });
-                        const freshData = await fetchCalendarData(year, month);
-                        setCalendarData(freshData);
-                      } catch (e) {
-                        console.error("Failed to create task", e);
-                      }
-                    }}
-                  />
-                </div>
-              )}
+                />
+              </div>
             </div>
           </div>
         )}

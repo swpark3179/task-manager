@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { taskCache, calendarCache, categoryCache, scheduleCache, updateTaskInAllCaches, removeTaskFromAllCaches } from './cache';
+import { taskCache, calendarCache, categoryCache, scheduleCache, updateTaskInAllCaches, removeTaskFromAllCaches, getCalendarFromMemoryCacheSync } from './cache';
 import { v4 as uuidv4 } from 'uuid';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
@@ -41,14 +41,98 @@ async function withSyncStatus<T>(operation: () => Promise<T>): Promise<T> {
 // =============================================
 // Background Sync Helper
 // =============================================
+//
+// Optimistic mutations call this so the UI never waits on the network.
+// We track in-flight syncs and retry transient failures with exponential
+// backoff so a brief connectivity blip doesn't leave local state diverged
+// from the server.
+
+const RETRY_DELAYS_MS = [2000, 4000, 8000, 16000];
+let inFlightSyncs = 0;
+const drainWaiters: Array<() => void> = [];
+
+function notifyDrained() {
+  // Snapshot waiters and clear the queue before invoking, so a waiter that
+  // re-registers from its callback gets a fresh notification (not this one).
+  const waiters = drainWaiters.splice(0, drainWaiters.length);
+  for (const w of waiters) {
+    try { w(); } catch { /* ignore */ }
+  }
+}
+
+function isTransientError(err: unknown): boolean {
+  // Treat anything without a Supabase 4xx response as transient.
+  // Postgres / Supabase errors expose `code` (e.g. '23505', 'PGRST...').
+  // Network failures (TypeError: Failed to fetch, AbortError) have no `code`.
+  if (!err || typeof err !== 'object') return true;
+  const anyErr = err as { code?: unknown; status?: unknown };
+  if (typeof anyErr.code === 'string' && anyErr.code.length > 0) return false;
+  if (typeof anyErr.status === 'number' && anyErr.status >= 400 && anyErr.status < 500) {
+    return false;
+  }
+  return true;
+}
 
 function runBackgroundSync(promiseFactory: () => Promise<void>) {
+  inFlightSyncs++;
   setSyncStatus('syncing');
-  promiseFactory().then(() => {
-    setSyncStatus('synced');
-  }).catch((err) => {
-    console.error('Background sync failed:', err);
-    setSyncStatus('error');
+
+  const finalize = (ok: boolean, err?: unknown) => {
+    inFlightSyncs = Math.max(0, inFlightSyncs - 1);
+    if (inFlightSyncs === 0) {
+      notifyDrained();
+    }
+    if (inFlightSyncs > 0) {
+      // Other syncs still pending — let them drive the final status.
+      return;
+    }
+    if (ok) {
+      setSyncStatus('synced');
+    } else {
+      console.error('Background sync failed (giving up):', err);
+      setSyncStatus('error');
+    }
+  };
+
+  const attempt = (retryIndex: number): void => {
+    promiseFactory()
+      .then(() => finalize(true))
+      .catch((err) => {
+        if (retryIndex < RETRY_DELAYS_MS.length && isTransientError(err)) {
+          setTimeout(() => attempt(retryIndex + 1), RETRY_DELAYS_MS[retryIndex]);
+        } else {
+          finalize(false, err);
+        }
+      });
+  };
+
+  attempt(0);
+}
+
+export function getInFlightSyncCount(): number {
+  return inFlightSyncs;
+}
+
+// Resolves once all in-flight optimistic background syncs have settled, so
+// callers (e.g. performFullSync) can avoid reading stale server state and
+// clobbering local-only changes that haven't been pushed yet. Resolves
+// immediately if nothing is in flight; falls back to a timeout so a stuck
+// sync can't block full sync forever.
+export function waitForBackgroundSyncs(timeoutMs: number = 30000): Promise<void> {
+  if (inFlightSyncs === 0) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    let done = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const handler = () => {
+      if (done) return;
+      done = true;
+      if (timer !== null) clearTimeout(timer);
+      const idx = drainWaiters.indexOf(handler);
+      if (idx >= 0) drainWaiters.splice(idx, 1);
+      resolve();
+    };
+    timer = setTimeout(handler, timeoutMs);
+    drainWaiters.push(handler);
   });
 }
 
@@ -197,21 +281,24 @@ export async function deleteTask(id: string): Promise<void> {
 
 
 export async function uncompleteTask(id: string): Promise<void> {
-  return withSyncStatus(async () => {
-    // Update task
+  // Optimistic update — UI reflects the change immediately, network syncs in
+  // the background (with retries) so poor connectivity doesn't block input.
+  await updateTaskInAllCaches(id, {
+    status: 'pending',
+    completed_at: null,
+  });
+  await calendarCache.invalidate();
+
+  runBackgroundSync(async () => {
     const updates: UpdateTaskInput = {
       status: 'pending',
       completed_at: null,
     };
-
     const { error } = await supabase
       .from('tasks')
       .update(updates)
       .eq('id', id);
-
     if (error) throw error;
-
-    await taskCache.invalidate();
   });
 }
 
@@ -291,44 +378,61 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
   return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
 
-    // Get incomplete tasks for the fromDate
-    const { data: incompleteTasks, error } = await supabase
+    // Fetch every task on fromDate so we can reason about subtrees as a whole.
+    // A subtree is rolled over only when at least one node has been started
+    // (status='in_progress'); pure-pending subtrees stay on their original
+    // date so untouched tasks don't pile up day after day.
+    const { data: dayTasks, error } = await supabase
       .from('tasks')
       .select('*')
       .eq('user_id', userId)
-      .eq('created_date', fromDate)
-      .in('status', ['pending', 'in_progress']);
+      .eq('created_date', fromDate);
 
     if (error) throw error;
-    if (!incompleteTasks || incompleteTasks.length === 0) return 0;
+    if (!dayTasks || dayTasks.length === 0) return 0;
 
-    // Find root tasks that need rollover (including those with incomplete children)
-    const allTaskIds = new Set(incompleteTasks.map((t: any) => t.id));
-
-    // Also fetch completed children of incomplete parents
-    const parentIds = incompleteTasks.filter((t: any) => !t.parent_id).map((t: any) => t.id);
-    if (parentIds.length > 0) {
-      const { data: childTasks } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('user_id', userId)
-        .in('parent_id', parentIds)
-        .eq('created_date', fromDate);
-
-      if (childTasks) {
-        for (const child of childTasks) {
-          allTaskIds.add(child.id);
-        }
+    const childrenByParent = new Map<string, any[]>();
+    for (const t of dayTasks) {
+      if (t.parent_id) {
+        const arr = childrenByParent.get(t.parent_id) ?? [];
+        arr.push(t);
+        childrenByParent.set(t.parent_id, arr);
       }
     }
 
-    // Create snapshots for all tasks being rolled over
-    const snapshots = incompleteTasks.map((t: any) => ({
-      user_id: userId,
-      task_id: t.id,
-      snapshot_date: fromDate,
-      status: t.status,
-    }));
+    const subtreeHasProgress = (taskId: string, status: string): boolean => {
+      if (status === 'in_progress') return true;
+      const children = childrenByParent.get(taskId) ?? [];
+      return children.some(c => subtreeHasProgress(c.id, c.status));
+    };
+
+    const allTaskIds = new Set<string>();
+    const snapshots: { user_id: string; task_id: string; snapshot_date: string; status: string }[] = [];
+
+    const collect = (task: any) => {
+      allTaskIds.add(task.id);
+      if (task.status === 'pending' || task.status === 'in_progress') {
+        snapshots.push({
+          user_id: userId,
+          task_id: task.id,
+          snapshot_date: fromDate,
+          status: task.status,
+        });
+      }
+      const children = childrenByParent.get(task.id) ?? [];
+      for (const c of children) collect(c);
+    };
+
+    // Walk root tasks; a root rolls over only if its subtree has progress and
+    // it isn't already terminal (completed/discarded).
+    for (const t of dayTasks) {
+      if (t.parent_id) continue;
+      if (t.status === 'completed' || t.status === 'discarded') continue;
+      if (!subtreeHasProgress(t.id, t.status)) continue;
+      collect(t);
+    }
+
+    if (allTaskIds.size === 0) return 0;
 
     const idsToUpdate = Array.from(allTaskIds);
     const promises: Promise<any>[] = [];
@@ -506,10 +610,17 @@ export async function fetchCalendarData(
   onRevalidated?: (data: CalendarCellData[]) => void,
 ): Promise<CalendarCellData[]> {
   const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+
+  // 메모리 캐시 히트: IndexedDB 조회조차 건너뛰고 즉시 반환
+  const memoryHit = getCalendarFromMemoryCacheSync(yearMonth);
+  if (memoryHit) {
+    if (onRevalidated) onRevalidated(memoryHit);
+    return memoryHit;
+  }
+
   const cached = await calendarCache.get(yearMonth);
   if (cached) {
-    // 캐시 히트: 로컬 DB만 사용 (재검증 없음)
-    // onRevalidated 콜백은 자동동기화 시 응답 포맧 호환성 용도로만 유지
+    // IndexedDB 캐시 히트: 로컬 DB만 사용 (재검증 없음)
     if (onRevalidated) onRevalidated(cached);
     return cached;
   }
@@ -522,16 +633,22 @@ export async function fetchCalendarData(
 // Data Export
 // =============================================
 
-export async function fetchAllDataForExport(): Promise<{
+export async function fetchAllDataForExport(dateRange?: { from: string; to: string }): Promise<{
   tasks: Task[];
 }> {
   return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('tasks')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', userId);
+
+    if (dateRange) {
+      query = query.gte('created_date', dateRange.from).lte('created_date', dateRange.to);
+    }
+
+    const { data, error } = await query
       .order('created_date', { ascending: false })
       .order('sort_order', { ascending: true });
 
@@ -707,6 +824,7 @@ export async function createCategory(name: string, color?: string): Promise<Cate
       .single();
 
     if (error) throw error;
+    await categoryCache.invalidate();
     return data;
   });
 }
@@ -719,6 +837,7 @@ export async function updateCategory(id: string, updates: { name?: string; color
       .eq('id', id);
 
     if (error) throw error;
+    await categoryCache.invalidate();
   });
 }
 
@@ -730,5 +849,6 @@ export async function deleteCategory(id: string): Promise<void> {
       .eq('id', id);
 
     if (error) throw error;
+    await categoryCache.invalidate();
   });
 }

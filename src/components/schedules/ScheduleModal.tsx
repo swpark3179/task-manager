@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import MDEditor from '@uiw/react-md-editor';
 import { createSchedule, updateSchedule, deleteSchedule, fetchCategories } from '../../lib/database';
 import {
@@ -206,7 +207,7 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
     }
   };
 
-  return (
+  return createPortal(
     <div className="modal-overlay schedule-modal-overlay" onClick={onClose}>
       <div
         className="modal-content schedule-modal"
@@ -421,6 +422,7 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

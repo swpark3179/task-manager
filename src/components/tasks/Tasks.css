@@ -105,6 +105,15 @@
   white-space: nowrap;
 }
 
+.task-item-original-date {
+  font-size: 10px;
+  color: var(--text-muted);
+  background-color: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 .task-item-progress {
   display: flex;
   align-items: center;

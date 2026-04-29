@@ -155,6 +155,9 @@ export async function updateTaskInAllCaches(taskId: string, updates: Partial<Tas
       if (modified) {
         entry.data = newTasks;
         await cursor.update(entry);
+        // CACHE_TTL.tasks is Infinity, so memory entries are sticky — keep
+        // them in sync with IDB or readers will see stale data.
+        memoryCache.set(`tasks:${cursor.key as string}`, entry);
       }
 
       cursor = await cursor.continue();
@@ -175,10 +178,15 @@ export async function removeTaskFromAllCaches(taskId: string): Promise<void> {
       const entry = cursor.value;
       const initialLength = entry.data.length;
 
-      entry.data = entry.data.filter((t: Task) => t.id !== taskId && t.parent_id !== taskId);
+      const idsToRemove = collectDescendantIds(entry.data, taskId);
+      idsToRemove.add(taskId);
+      entry.data = entry.data.filter((t: Task) => !idsToRemove.has(t.id));
 
       if (entry.data.length !== initialLength) {
         await cursor.update(entry);
+        // CACHE_TTL.tasks is Infinity, so memory entries are sticky — keep
+        // them in sync with IDB or readers will see stale data.
+        memoryCache.set(`tasks:${cursor.key as string}`, entry);
       }
 
       cursor = await cursor.continue();
@@ -187,6 +195,21 @@ export async function removeTaskFromAllCaches(taskId: string): Promise<void> {
   } catch (err) {
     console.error('Failed to remove from cache:', err);
   }
+}
+
+function collectDescendantIds(tasks: Task[], parentId: string): Set<string> {
+  const ids = new Set<string>();
+  const queue = [parentId];
+  while (queue.length > 0) {
+    const current = queue.pop()!;
+    for (const t of tasks) {
+      if (t.parent_id === current && !ids.has(t.id)) {
+        ids.add(t.id);
+        queue.push(t.id);
+      }
+    }
+  }
+  return ids;
 }
 
 export async function getTaskFromAllCaches(taskId: string): Promise<Task | null> {
@@ -231,6 +254,7 @@ export async function updateTaskInCache(taskId: string, updates: Partial<Task>):
       if (modified) {
         entry.data = newTasks;
         await cursor.update(entry);
+        memoryCache.set(`tasks:${cursor.key as string}`, entry);
         break;
       }
 
@@ -253,10 +277,13 @@ export async function removeTaskFromCache(taskId: string): Promise<void> {
       const entry = cursor.value;
       const initialLength = entry.data.length;
 
-      entry.data = entry.data.filter((t: Task) => t.id !== taskId && t.parent_id !== taskId);
+      const idsToRemove = collectDescendantIds(entry.data, taskId);
+      idsToRemove.add(taskId);
+      entry.data = entry.data.filter((t: Task) => !idsToRemove.has(t.id));
 
       if (entry.data.length !== initialLength) {
         await cursor.update(entry);
+        memoryCache.set(`tasks:${cursor.key as string}`, entry);
       }
 
       cursor = await cursor.continue();
@@ -286,10 +313,21 @@ export async function getTaskFromCache(taskId: string): Promise<Task | null> {
 // =============================================
 
 
+async function listKeys(storeName: string): Promise<string[]> {
+  try {
+    const db = await getDB();
+    const keys = await db.getAllKeys(storeName);
+    return keys.map((k) => String(k));
+  } catch {
+    return [];
+  }
+}
+
 export const taskCache = {
   get: (date: string) => getCached<Task[]>('tasks', date, CACHE_TTL.tasks),
   set: (date: string, tasks: Task[]) => setCache('tasks', date, tasks),
   invalidate: (date?: string) => invalidateCache('tasks', date),
+  listDates: () => listKeys('tasks'),
   updateTask: async (date: string, taskId: string, updates: Partial<Task>) => {
     const tasks = await getCached<Task[]>('tasks', date, 0);
     if (tasks) {
@@ -308,7 +346,9 @@ export const taskCache = {
   removeTask: async (date: string, taskId: string) => {
     const tasks = await getCached<Task[]>('tasks', date, 0);
     if (tasks) {
-      const newTasks = tasks.filter(t => t.id !== taskId && t.parent_id !== taskId);
+      const idsToRemove = collectDescendantIds(tasks, taskId);
+      idsToRemove.add(taskId);
+      const newTasks = tasks.filter(t => !idsToRemove.has(t.id));
       await setCache('tasks', date, newTasks);
     }
   }
@@ -341,6 +381,7 @@ export const calendarCache = {
   set: (yearMonth: string, data: CalendarCellData[]) =>
     setCache('calendar', yearMonth, data),
   invalidate: (yearMonth?: string) => invalidateCache('calendar', yearMonth),
+  listMonths: () => listKeys('calendar'),
 };
 
 // =============================================

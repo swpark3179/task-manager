@@ -10,6 +10,7 @@ import { formatDateFull } from './dateUtils';
 interface ExportData {
   tasks: Task[];
   userEmail: string;
+  dateRange?: { from: string; to: string };
 }
 
 /**
@@ -23,6 +24,9 @@ export function generateMarkdownExport(data: ExportData): string {
   lines.push('# 업무 관리 데이터 내보내기');
   lines.push(`> 사용자: ${userEmail}`);
   lines.push(`> 내보내기 일시: ${now}`);
+  if (data.dateRange) {
+    lines.push(`> 기간: ${data.dateRange.from} ~ ${data.dateRange.to}`);
+  }
   lines.push('');
   lines.push('---');
   lines.push('');

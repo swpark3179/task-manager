@@ -29,6 +29,9 @@ export default function SettingsPage() {
   const [proxyPort, setProxyPort] = useState('');
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportMode, setExportMode] = useState<'all' | 'range'>('all');
+  const [exportFrom, setExportFrom] = useState('');
+  const [exportTo, setExportTo] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -192,36 +195,64 @@ export default function SettingsPage() {
   };
 
   const handleExport = async () => {
+    if (exportMode === 'range' && exportFrom && exportTo && exportFrom > exportTo) {
+      alert('시작일이 종료일보다 늦을 수 없습니다.');
+      return;
+    }
+
     setExporting(true);
     try {
-      const { tasks } = await fetchAllDataForExport();
+      const dateRange = exportMode === 'range' && exportFrom && exportTo
+        ? { from: exportFrom, to: exportTo }
+        : undefined;
+      const { tasks } = await fetchAllDataForExport(dateRange);
+
+      if (tasks.length === 0) {
+        alert('내보낼 데이터가 없습니다.');
+        return;
+      }
+
       const markdown = generateMarkdownExport({
         tasks,
         userEmail: user?.email || 'unknown',
+        dateRange,
       });
 
-      try {
+      const filename = `task-manager-export-${new Date().toISOString().split('T')[0]}.md`;
+      const isTauri =
+        typeof window !== 'undefined' &&
+        ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+
+      if (isTauri) {
         const { save } = await import('@tauri-apps/plugin-dialog');
         const { writeTextFile } = await import('@tauri-apps/plugin-fs');
 
         const filePath = await save({
           filters: [{ name: 'Markdown', extensions: ['md'] }],
-          defaultPath: `task-manager-export-${new Date().toISOString().split('T')[0]}.md`,
+          defaultPath: filename,
         });
 
-        if (filePath) {
-          await writeTextFile(filePath, markdown);
-          alert('데이터가 성공적으로 내보내졌습니다.');
+        if (!filePath) {
+          // 사용자가 취소한 경우
+          return;
         }
-      } catch {
-        // Fallback: download via blob (non-Tauri environment)
+
+        await writeTextFile(filePath, markdown);
+        alert('데이터가 성공적으로 내보내졌습니다.');
+      } else {
+        // 브라우저: Blob을 anchor로 다운로드
         const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `task-manager-export-${new Date().toISOString().split('T')[0]}.md`;
+        a.download = filename;
+        a.rel = 'noopener';
+        a.style.display = 'none';
+        document.body.appendChild(a);
         a.click();
-        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        // 일부 브라우저는 click 직후 revoke 시 다운로드가 시작되지 않음
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
     } catch (err) {
       console.error('Export failed:', err);
@@ -539,10 +570,50 @@ export default function SettingsPage() {
             모든 할일과 수행내용을 마크다운(.md) 파일로 내보냅니다.
             사람이 읽을 수 있는 형태로 저장됩니다.
           </p>
+
+          <div className="settings-field" style={{ marginBottom: 'var(--space-md)' }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: 'var(--space-sm)' }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${exportMode === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setExportMode('all')}
+              >
+                전체 기간
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${exportMode === 'range' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setExportMode('range')}
+              >
+                기간 지정
+              </button>
+            </div>
+
+            {exportMode === 'range' && (
+              <div className="animate-fade-in" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="date"
+                  className="input"
+                  value={exportFrom}
+                  onChange={e => setExportFrom(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>~</span>
+                <input
+                  type="date"
+                  className="input"
+                  value={exportTo}
+                  onChange={e => setExportTo(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+              </div>
+            )}
+          </div>
+
           <button
             className="btn btn-primary"
             onClick={handleExport}
-            disabled={exporting}
+            disabled={exporting || (exportMode === 'range' && (!exportFrom || !exportTo))}
           >
             {exporting ? (
               <>
@@ -550,7 +621,7 @@ export default function SettingsPage() {
                 내보내는 중...
               </>
             ) : (
-              '전체 데이터 내보내기'
+              exportMode === 'all' ? '전체 데이터 내보내기' : '선택 기간 내보내기'
             )}
           </button>
         </section>
