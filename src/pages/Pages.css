@@ -39,6 +39,12 @@
   margin-top: 2px;
 }
 
+.date-navigator {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 /* === Calendar === */
 .calendar-nav {
   display: flex;
@@ -872,7 +878,7 @@
 }
 
 @media (max-width: 767px) {
-  .date-navigator-btn {
+  .date-navigator {
     display: none;
   }
 }

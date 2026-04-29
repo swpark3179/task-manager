@@ -576,16 +576,22 @@ export async function fetchCalendarData(
 // Data Export
 // =============================================
 
-export async function fetchAllDataForExport(): Promise<{
+export async function fetchAllDataForExport(dateRange?: { from: string; to: string }): Promise<{
   tasks: Task[];
 }> {
   return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('tasks')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', userId);
+
+    if (dateRange) {
+      query = query.gte('created_date', dateRange.from).lte('created_date', dateRange.to);
+    }
+
+    const { data, error } = await query
       .order('created_date', { ascending: false })
       .order('sort_order', { ascending: true });
 

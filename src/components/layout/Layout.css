@@ -270,6 +270,10 @@
   justify-content: center;
 }
 
+.sidebar.collapsed .sidebar-nav {
+  justify-content: center;
+}
+
 .sidebar.collapsed .sidebar-nav-item {
   justify-content: center;
   padding: 10px;

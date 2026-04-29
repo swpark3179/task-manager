@@ -191,10 +191,10 @@ export function filterTasksByStatus(tasks: Task[], status: TaskStatus): Task[] {
       const filteredChildren = filterTasksByStatus(task.children, status);
       if (filteredChildren.length > 0) {
         result.push({ ...task, children: filteredChildren });
-      } else if (task.status === status) {
+      } else if (getEffectiveStatus(task) === status) {
         result.push({ ...task, children: [] });
       }
-    } else if (task.status === status) {
+    } else if (getEffectiveStatus(task) === status) {
       result.push(task);
     }
   }

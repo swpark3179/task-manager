@@ -186,12 +186,12 @@ export default function TodayPage() {
           <h1 className="page-title">오늘의 할일</h1>
           <p className="page-subtitle">{formatDateDisplay(today)}</p>
         </div>
-        <div className="date-navigator" style={{ gap: '4px', marginTop: '4px' }}>
-          <button className="date-navigator-btn" style={{ width: '28px', height: '28px' }} onClick={() => navigate(`/history/${getPrevDay(today)}`)} title="어제">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
+        <div className="date-navigator">
+          <button className="calendar-nav-btn" onClick={() => navigate(`/history/${getPrevDay(today)}`)} title="어제">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
           </button>
-          <button className="date-navigator-btn" style={{ width: '28px', height: '28px' }} onClick={() => navigate(`/history/${getNextDay(today)}`)} title="내일">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+          <button className="calendar-nav-btn" onClick={() => navigate(`/history/${getNextDay(today)}`)} title="내일">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
           </button>
         </div>
       </div>

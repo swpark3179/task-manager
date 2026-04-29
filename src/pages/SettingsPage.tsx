@@ -29,6 +29,9 @@ export default function SettingsPage() {
   const [proxyPort, setProxyPort] = useState('');
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportMode, setExportMode] = useState<'all' | 'range'>('all');
+  const [exportFrom, setExportFrom] = useState('');
+  const [exportTo, setExportTo] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -194,10 +197,14 @@ export default function SettingsPage() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const { tasks } = await fetchAllDataForExport();
+      const dateRange = exportMode === 'range' && exportFrom && exportTo
+        ? { from: exportFrom, to: exportTo }
+        : undefined;
+      const { tasks } = await fetchAllDataForExport(dateRange);
       const markdown = generateMarkdownExport({
         tasks,
         userEmail: user?.email || 'unknown',
+        dateRange,
       });
 
       try {
@@ -539,10 +546,50 @@ export default function SettingsPage() {
             모든 할일과 수행내용을 마크다운(.md) 파일로 내보냅니다.
             사람이 읽을 수 있는 형태로 저장됩니다.
           </p>
+
+          <div className="settings-field" style={{ marginBottom: 'var(--space-md)' }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: 'var(--space-sm)' }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${exportMode === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setExportMode('all')}
+              >
+                전체 기간
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${exportMode === 'range' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setExportMode('range')}
+              >
+                기간 지정
+              </button>
+            </div>
+
+            {exportMode === 'range' && (
+              <div className="animate-fade-in" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="date"
+                  className="input"
+                  value={exportFrom}
+                  onChange={e => setExportFrom(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>~</span>
+                <input
+                  type="date"
+                  className="input"
+                  value={exportTo}
+                  onChange={e => setExportTo(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+              </div>
+            )}
+          </div>
+
           <button
             className="btn btn-primary"
             onClick={handleExport}
-            disabled={exporting}
+            disabled={exporting || (exportMode === 'range' && (!exportFrom || !exportTo))}
           >
             {exporting ? (
               <>
@@ -550,7 +597,7 @@ export default function SettingsPage() {
                 내보내는 중...
               </>
             ) : (
-              '전체 데이터 내보내기'
+              exportMode === 'all' ? '전체 데이터 내보내기' : '선택 기간 내보내기'
             )}
           </button>
         </section>
