@@ -17,6 +17,17 @@ export default function TaskSettingsModal({ task, onClose, onUpdate }: TaskSetti
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
     const loadCategories = async () => {
       try {
         const data = await fetchCategories();
