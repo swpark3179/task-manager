@@ -144,7 +144,7 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
   const cached = await taskCache.get(date);
   if (cached) {
     // 캐시 히트: 로컬 DB만 사용 (재검증 없음)
-    return buildTaskTree(cached);
+    return buildTaskTree(await enrichWithParentInfo(cached));
   }
 
   // 캐시 미스: Supabase 직접 조회 (동기화 이전 단계 또는 범위 밖 날짜)
@@ -169,7 +169,7 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
       .eq('user_id', userId)
       .eq('snapshot_date', date);
 
-    let tasks = currentTasks || [];
+    let tasks: Task[] = (currentTasks || []) as Task[];
 
     if (snapshots && snapshots.length > 0) {
       const snapshotTaskIds = snapshots.map((s: any) => s.task_id);
@@ -189,13 +189,68 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
       }
     }
 
+    // 이관 후 원래 날짜에 남아있는 완료/폐기된 하위작업을 부모 트리에 다시 붙여 보여주기 위해
+    // 이 날짜의 작업들을 부모로 갖는 다른 날짜의 작업들을 함께 가져옵니다(트리 깊이만큼 반복).
+    const knownIds = new Set(tasks.map((t) => t.id));
+    let frontier = Array.from(knownIds);
+    while (frontier.length > 0) {
+      const { data: descendants } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .in('parent_id', frontier)
+        .neq('created_date', date);
+      if (!descendants || descendants.length === 0) break;
+      const next: string[] = [];
+      for (const d of descendants) {
+        if (knownIds.has(d.id)) continue;
+        knownIds.add(d.id);
+        tasks.push({ ...(d as Task), is_snapshot: true });
+        next.push(d.id);
+      }
+      frontier = next;
+    }
+
     await taskCache.set(date, tasks);
     setSyncStatus('synced');
-    return buildTaskTree(tasks);
+    return buildTaskTree(await enrichWithParentInfo(tasks));
   } catch (err) {
     setSyncStatus('error');
     throw err;
   }
+}
+
+/**
+ * 현재 화면(date)에 부모가 함께 보이지 않는 작업들에 대해, 부모 작업의 간단한 정보
+ * (id, title, current created_date)를 채워줍니다. 사용자는 이 정보를 통해 상위작업이
+ * 어느 날짜로 이관되었는지 확인하고 해당 날짜로 이동할 수 있습니다.
+ */
+async function enrichWithParentInfo(tasks: Task[]): Promise<Task[]> {
+  const localIds = new Set(tasks.map((t) => t.id));
+  const externalParentIds = new Set<string>();
+  for (const t of tasks) {
+    if (t.parent_id && !localIds.has(t.parent_id)) {
+      externalParentIds.add(t.parent_id);
+    }
+  }
+  if (externalParentIds.size === 0) return tasks;
+
+  const userId = await getCurrentUserId();
+  const { data: parents } = await supabase
+    .from('tasks')
+    .select('id, title, created_date')
+    .eq('user_id', userId)
+    .in('id', Array.from(externalParentIds));
+
+  if (!parents || parents.length === 0) return tasks;
+  const parentMap = new Map<string, { id: string; title: string; created_date: string }>();
+  for (const p of parents) parentMap.set(p.id, p as any);
+
+  return tasks.map((t) =>
+    t.parent_id && parentMap.has(t.parent_id)
+      ? { ...t, parent_info: parentMap.get(t.parent_id) }
+      : t
+  );
 }
 
 
@@ -397,43 +452,26 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
     if (error) throw error;
     if (!pastTasks || pastTasks.length === 0) return 0;
 
-    // 트리 구조 파악을 위한 맵 (전체 pastTasks 대상)
-    const childrenByParent = new Map<string, any[]>();
-    for (const t of pastTasks) {
-      if (t.parent_id) {
-        const arr = childrenByParent.get(t.parent_id) ?? [];
-        arr.push(t);
-        childrenByParent.set(t.parent_id, arr);
-      }
-    }
-
     const allTaskIds = new Set<string>();
     const snapshots: { user_id: string; task_id: string; snapshot_date: string; status: string }[] = [];
 
-    // 특정 태스크와 그 하위 트리를 모두 수집하고 스냅샷 생성 대상으로 등록
-    const collectSubtree = (task: any, date: string) => {
-      allTaskIds.add(task.id);
+    // 미완료(pending/in_progress) 작업만 이관합니다.
+    // 완료(completed)/폐기(discarded) 작업은 트리상의 위치와 관계없이 원래 날짜에 남깁니다.
+    // 결과적으로 하위작업이 일부만 완료된 경우, 상위작업과 미완료 하위작업만 이관되고
+    // 완료된 하위작업은 원래 날짜의 최상위 작업으로 자연스럽게 노출됩니다.
+    for (const t of pastTasks) {
+      if (t.status !== 'pending' && t.status !== 'in_progress') continue;
+      allTaskIds.add(t.id);
       // 'in_progress' 상태인 경우에만 과거 날짜에 대한 스냅샷(기억)을 남깁니다.
       // 'pending' 상태는 스냅샷을 생성하지 않고 오늘 날짜로 조용히 이동합니다.
       // (DB의 created_at을 통해 실제 생성일은 여전히 알 수 있습니다.)
-      if (task.status === 'in_progress') {
+      if (t.status === 'in_progress') {
         snapshots.push({
           user_id: userId,
-          task_id: task.id,
-          snapshot_date: date,
-          status: task.status,
+          task_id: t.id,
+          snapshot_date: t.created_date,
+          status: t.status,
         });
-      }
-      const children = childrenByParent.get(task.id) ?? [];
-      for (const c of children) collectSubtree(c, date);
-    };
-
-    // 각 날짜별로 루트 태스크들을 찾아 이관 대상 결정
-    // 사용자의 요청에 따라 '대기(pending)' 상태인 루트도 포함합니다.
-    for (const t of pastTasks) {
-      // 루트 태스크이면서 미완료 상태인 경우 이관 대상으로 선정
-      if (!t.parent_id && (t.status === 'pending' || t.status === 'in_progress')) {
-        collectSubtree(t, t.created_date);
       }
     }
 

@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Task } from '../../types';
 import MarkdownEditor from '../markdown/MarkdownEditor';
 import MarkdownViewer from '../markdown/MarkdownViewer';
 import TaskInput from './TaskInput';
+import { formatDateDisplay, getTodayString } from '../../utils/dateUtils';
 import './Tasks.css';
 
 import type { ReactNode } from 'react';
@@ -18,11 +20,23 @@ export default function TaskDetail({
   task, onSaveDescription, onAddChild
 , children
 }: TaskDetailProps) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'description' | 'children'>('description');
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState(task.description || '');
 
   const isFinished = task.status === 'completed' || task.status === 'discarded';
+
+  const parentInfo = task.parent_info;
+  const handleParentNavigate = () => {
+    if (!parentInfo) return;
+    const today = getTodayString();
+    if (parentInfo.created_date === today) {
+      navigate('/');
+    } else {
+      navigate(`/history/${parentInfo.created_date}`);
+    }
+  };
 
   const activeChildren = useMemo(() => task.children?.filter(c => c.status !== 'discarded') || [], [task.children]);
   const remainingCount = useMemo(() => activeChildren.filter(c => c.status !== 'completed').length, [activeChildren]);
@@ -43,6 +57,25 @@ export default function TaskDetail({
 
   return (
     <div className="task-detail">
+      {parentInfo && (
+        <div className="task-detail-parent-link">
+          <span className="task-detail-parent-label">상위 작업</span>
+          <button
+            type="button"
+            className="task-detail-parent-button"
+            onClick={handleParentNavigate}
+            title={`${formatDateDisplay(parentInfo.created_date)}로 이동`}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+              <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+            </svg>
+            <span className="task-detail-parent-title">{parentInfo.title}</span>
+            <span className="task-detail-parent-date">{formatDateDisplay(parentInfo.created_date)}</span>
+          </button>
+        </div>
+      )}
       <div className="task-detail-tabs">
         {tabs.map(tab => (
           <button
