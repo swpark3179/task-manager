@@ -521,7 +521,7 @@ export default function CalendarPage() {
     setShowScheduleModal(true);
   };
 
-  const closeDayModal = () => {
+  const closeDayModal = useCallback(() => {
     setSelectedDate(null);
     dayModalDragOffsetRef.current = 0;
     setDayModalDragOffset(0);
@@ -794,20 +794,6 @@ export default function CalendarPage() {
                       const continuesRight = !bar.isActualEnd;
                       const showTitle = bar.isActualStart || bar.startCol === 0;
                       const catColor = getCategoryColor(bar.schedule.category_id);
-                      const fallbackDate = bar.schedule.start_date.split('T')[0];
-                      const resolveDateFromPoint = (clientX: number, clientY: number): string => {
-                        if (calendarGridRef.current) {
-                          const cells = calendarGridRef.current.querySelectorAll('.calendar-cell[data-date]');
-                          for (const cell of Array.from(cells)) {
-                            const r = cell.getBoundingClientRect();
-                            if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
-                              const d = cell.getAttribute('data-date');
-                              if (d) return d;
-                            }
-                          }
-                        }
-                        return fallbackDate;
-                      };
                       return (
                         <div
                           key={`${bar.schedule.id}-w${wIdx}`}
@@ -819,7 +805,7 @@ export default function CalendarPage() {
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleCellClick(resolveDateFromPoint(e.clientX, e.clientY));
+                            openScheduleBar(bar.schedule);
                           }}
                           onMouseDown={(e) => e.stopPropagation()}
                           onTouchStart={(e) => e.stopPropagation()}
