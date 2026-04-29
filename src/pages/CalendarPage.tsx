@@ -426,7 +426,7 @@ export default function CalendarPage() {
     setShowScheduleModal(true);
   };
 
-  const closeDayModal = () => {
+  const closeDayModal = useCallback(() => {
     setSelectedDate(null);
     setViewMode("tree");
     dayModalDragOffsetRef.current = 0;
@@ -434,7 +434,22 @@ export default function CalendarPage() {
     setIsDayModalDragging(false);
     dayModalDragStartYRef.current = null;
     suppressDayModalTitleClickRef.current = false;
-  };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (showScheduleModal) {
+          return;
+        }
+        if (selectedDate) {
+          closeDayModal();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedDate, showScheduleModal, closeDayModal]);
 
   const handleDayModalHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;

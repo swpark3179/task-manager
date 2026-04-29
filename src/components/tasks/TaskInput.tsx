@@ -28,6 +28,7 @@ export default function TaskInput({ onAdd, parentId, placeholder }: TaskInputPro
     if (e.key === 'Escape') {
       setTitle('');
       inputRef.current?.blur();
+      e.stopPropagation();
     }
   };
 

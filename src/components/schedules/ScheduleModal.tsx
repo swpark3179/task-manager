@@ -72,6 +72,17 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
   const isSameDay = startDate === endDate;
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
     fetchCategories().then(setCategories).catch(console.error);
   }, []);
 
