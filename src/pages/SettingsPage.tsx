@@ -195,40 +195,64 @@ export default function SettingsPage() {
   };
 
   const handleExport = async () => {
+    if (exportMode === 'range' && exportFrom && exportTo && exportFrom > exportTo) {
+      alert('시작일이 종료일보다 늦을 수 없습니다.');
+      return;
+    }
+
     setExporting(true);
     try {
       const dateRange = exportMode === 'range' && exportFrom && exportTo
         ? { from: exportFrom, to: exportTo }
         : undefined;
       const { tasks } = await fetchAllDataForExport(dateRange);
+
+      if (tasks.length === 0) {
+        alert('내보낼 데이터가 없습니다.');
+        return;
+      }
+
       const markdown = generateMarkdownExport({
         tasks,
         userEmail: user?.email || 'unknown',
         dateRange,
       });
 
-      try {
+      const filename = `task-manager-export-${new Date().toISOString().split('T')[0]}.md`;
+      const isTauri =
+        typeof window !== 'undefined' &&
+        ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+
+      if (isTauri) {
         const { save } = await import('@tauri-apps/plugin-dialog');
         const { writeTextFile } = await import('@tauri-apps/plugin-fs');
 
         const filePath = await save({
           filters: [{ name: 'Markdown', extensions: ['md'] }],
-          defaultPath: `task-manager-export-${new Date().toISOString().split('T')[0]}.md`,
+          defaultPath: filename,
         });
 
-        if (filePath) {
-          await writeTextFile(filePath, markdown);
-          alert('데이터가 성공적으로 내보내졌습니다.');
+        if (!filePath) {
+          // 사용자가 취소한 경우
+          return;
         }
-      } catch {
-        // Fallback: download via blob (non-Tauri environment)
+
+        await writeTextFile(filePath, markdown);
+        alert('데이터가 성공적으로 내보내졌습니다.');
+      } else {
+        // 브라우저: Blob을 anchor로 다운로드
         const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `task-manager-export-${new Date().toISOString().split('T')[0]}.md`;
+        a.download = filename;
+        a.rel = 'noopener';
+        a.style.display = 'none';
+        document.body.appendChild(a);
         a.click();
-        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        // 일부 브라우저는 click 직후 revoke 시 다운로드가 시작되지 않음
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
     } catch (err) {
       console.error('Export failed:', err);
