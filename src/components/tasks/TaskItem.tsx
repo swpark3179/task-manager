@@ -5,7 +5,7 @@ import TaskCheckbox from './TaskCheckbox';
 import TaskTree from './TaskTree';
 import TaskDetail from './TaskDetail';
 import { hasChildren, getEffectiveStatus } from '../../utils/taskUtils';
-import { formatShortDate } from '../../utils/dateUtils';
+import { formatShortDate, formatTimestamp } from '../../utils/dateUtils';
 import './Tasks.css';
 
 interface TaskItemProps {
@@ -42,6 +42,14 @@ export default function TaskItem({
   const originalDate = task.created_at?.slice(0, 10);
   const showOriginalDate = !!originalDate && originalDate !== task.created_date;
 
+  // 부모 작업이 이관되어 다른 날짜에 있을 때(또는 자기 자신이 다른 날짜에 스냅샷으로
+  // 표시될 때) 사용자가 언제 완료/폐기되었는지 알 수 있도록 종료 시각을 노출합니다.
+  const completionDate = task.completed_at?.slice(0, 10);
+  const discardDate = task.discarded_at?.slice(0, 10);
+  const showFinishDate = task.is_snapshot || !!task.parent_info;
+  const showCompletionDate = !!completionDate && effectiveStatus === 'completed' && showFinishDate;
+  const showDiscardDate = !!discardDate && effectiveStatus === 'discarded' && showFinishDate;
+
 
   return (
     <div
@@ -75,6 +83,22 @@ export default function TaskItem({
               title={`등록일: ${originalDate}`}
             >
               등록 {formatShortDate(originalDate)}
+            </span>
+          )}
+          {showCompletionDate && (
+            <span
+              className="task-item-original-date"
+              title={`완료: ${formatTimestamp(task.completed_at!)}`}
+            >
+              완료 {formatShortDate(completionDate!)}
+            </span>
+          )}
+          {showDiscardDate && (
+            <span
+              className="task-item-original-date"
+              title={`폐기: ${formatTimestamp(task.discarded_at!)}`}
+            >
+              폐기 {formatShortDate(discardDate!)}
             </span>
           )}
 

@@ -51,6 +51,13 @@ export interface Task {
   // Frontend-only (not stored in DB)
   children?: Task[];
   is_snapshot?: boolean;
+  // Frontend-only: 상위작업이 다른 날짜에 있을 때 표시용 메타데이터.
+  // 완료된 하위작업이 원래 날짜에 남았을 때, 이관된 상위작업으로 이동할 수 있는 링크를 제공합니다.
+  parent_info?: {
+    id: string;
+    title: string;
+    created_date: string;
+  };
 }
 
 

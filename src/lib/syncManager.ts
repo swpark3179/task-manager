@@ -123,6 +123,26 @@ export async function performFullSync(): Promise<void> {
       tasksByDate.get(date)!.push(task);
     }
 
+    // 이관 후 원래 날짜에 남은 완료/폐기 하위작업을, 이관된 부모의 날짜에도
+    // 스냅샷으로 함께 노출시킵니다. 부모 화면(상위작업이 있는 날)에서 완료된
+    // 하위작업을 확인할 수 있도록 보강하는 단계입니다.
+    {
+      const taskMap = new Map<string, Task>();
+      for (const t of (tasks || [])) taskMap.set(t.id, t);
+      for (const t of (tasks || [])) {
+        if (!t.parent_id) continue;
+        const parent = taskMap.get(t.parent_id);
+        if (!parent) continue;
+        if (parent.created_date === t.created_date) continue;
+        const parentDate = parent.created_date;
+        if (!tasksByDate.has(parentDate)) tasksByDate.set(parentDate, []);
+        const bucket = tasksByDate.get(parentDate)!;
+        if (!bucket.some((x) => x.id === t.id)) {
+          bucket.push({ ...t, is_snapshot: true } as Task);
+        }
+      }
+    }
+
     // 2. Snapshots 동기화
     const { data: snapshots } = await supabase
       .from('daily_task_snapshots')
