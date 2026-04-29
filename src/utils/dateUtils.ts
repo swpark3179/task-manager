@@ -51,6 +51,10 @@ export function getPrevDay(date: string): string {
   return format(subDays(parseISO(date), 1), 'yyyy-MM-dd');
 }
 
+export function getDaysAgo(date: string, days: number): string {
+  return format(subDays(parseISO(date), days), 'yyyy-MM-dd');
+}
+
 export function getMonthDays(year: number, month: number): Date[] {
   const start = startOfMonth(new Date(year, month - 1));
   const end = endOfMonth(new Date(year, month - 1));

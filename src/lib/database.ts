@@ -374,25 +374,32 @@ export async function discardTask(id: string): Promise<void> {
 // Daily Rollover
 // =============================================
 
+/**
+ * 지정된 범위(startDate ~ endDate)의 미완료 할일들을 toDate로 이관합니다.
+ * 'pending', 'in_progress' 상태인 모든 할일을 대상으로 합니다.
+ */
 export async function rolloverTasks(fromDate: string, toDate: string): Promise<number> {
+  // if fromDate is same as toDate, nothing to do
+  if (fromDate === toDate) return 0;
+
   return withSyncStatus(async () => {
     const userId = await getCurrentUserId();
 
-    // Fetch every task on fromDate so we can reason about subtrees as a whole.
-    // A subtree is rolled over only when at least one node has been started
-    // (status='in_progress'); pure-pending subtrees stay on their original
-    // date so untouched tasks don't pile up day after day.
-    const { data: dayTasks, error } = await supabase
+    // fromDate가 단일 날짜일 수도 있고, 범위의 시작일 수도 있습니다.
+    // 여기서는 fromDate부터 toDate 직전까지의 모든 날짜를 대상으로 조회합니다.
+    const { data: pastTasks, error } = await supabase
       .from('tasks')
       .select('*')
       .eq('user_id', userId)
-      .eq('created_date', fromDate);
+      .gte('created_date', fromDate)
+      .lt('created_date', toDate);
 
     if (error) throw error;
-    if (!dayTasks || dayTasks.length === 0) return 0;
+    if (!pastTasks || pastTasks.length === 0) return 0;
 
+    // 트리 구조 파악을 위한 맵 (전체 pastTasks 대상)
     const childrenByParent = new Map<string, any[]>();
-    for (const t of dayTasks) {
+    for (const t of pastTasks) {
       if (t.parent_id) {
         const arr = childrenByParent.get(t.parent_id) ?? [];
         arr.push(t);
@@ -400,36 +407,34 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
       }
     }
 
-    const subtreeHasProgress = (taskId: string, status: string): boolean => {
-      if (status === 'in_progress') return true;
-      const children = childrenByParent.get(taskId) ?? [];
-      return children.some(c => subtreeHasProgress(c.id, c.status));
-    };
-
     const allTaskIds = new Set<string>();
     const snapshots: { user_id: string; task_id: string; snapshot_date: string; status: string }[] = [];
 
-    const collect = (task: any) => {
+    // 특정 태스크와 그 하위 트리를 모두 수집하고 스냅샷 생성 대상으로 등록
+    const collectSubtree = (task: any, date: string) => {
       allTaskIds.add(task.id);
-      if (task.status === 'pending' || task.status === 'in_progress') {
+      // 'in_progress' 상태인 경우에만 과거 날짜에 대한 스냅샷(기억)을 남깁니다.
+      // 'pending' 상태는 스냅샷을 생성하지 않고 오늘 날짜로 조용히 이동합니다.
+      // (DB의 created_at을 통해 실제 생성일은 여전히 알 수 있습니다.)
+      if (task.status === 'in_progress') {
         snapshots.push({
           user_id: userId,
           task_id: task.id,
-          snapshot_date: fromDate,
+          snapshot_date: date,
           status: task.status,
         });
       }
       const children = childrenByParent.get(task.id) ?? [];
-      for (const c of children) collect(c);
+      for (const c of children) collectSubtree(c, date);
     };
 
-    // Walk root tasks; a root rolls over only if its subtree has progress and
-    // it isn't already terminal (completed/discarded).
-    for (const t of dayTasks) {
-      if (t.parent_id) continue;
-      if (t.status === 'completed' || t.status === 'discarded') continue;
-      if (!subtreeHasProgress(t.id, t.status)) continue;
-      collect(t);
+    // 각 날짜별로 루트 태스크들을 찾아 이관 대상 결정
+    // 사용자의 요청에 따라 '대기(pending)' 상태인 루트도 포함합니다.
+    for (const t of pastTasks) {
+      // 루트 태스크이면서 미완료 상태인 경우 이관 대상으로 선정
+      if (!t.parent_id && (t.status === 'pending' || t.status === 'in_progress')) {
+        collectSubtree(t, t.created_date);
+      }
     }
 
     if (allTaskIds.size === 0) return 0;
@@ -437,7 +442,9 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
     const idsToUpdate = Array.from(allTaskIds);
     const promises: Promise<any>[] = [];
 
+    // 1. 기존 날짜에 대한 스냅샷 저장 (히스토리 보존)
     if (snapshots.length > 0) {
+      // 중복 스냅샷 방지를 위해 task_id, snapshot_date 기준으로 upsert
       promises.push(
         supabase
           .from('daily_task_snapshots')
@@ -445,6 +452,7 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
       );
     }
 
+    // 2. 태스크의 날짜를 오늘로 변경
     promises.push(
       supabase
         .from('tasks')
@@ -457,6 +465,7 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
       if (res.error) throw res.error;
     }
 
+    // 캐시 무효화
     await taskCache.invalidate();
     await calendarCache.invalidate();
 
