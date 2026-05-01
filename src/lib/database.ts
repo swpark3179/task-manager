@@ -453,26 +453,16 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
     if (!pastTasks || pastTasks.length === 0) return 0;
 
     const allTaskIds = new Set<string>();
-    const snapshots: { user_id: string; task_id: string; snapshot_date: string; status: string }[] = [];
 
     // 미완료(pending/in_progress) 작업만 이관합니다.
     // 완료(completed)/폐기(discarded) 작업은 트리상의 위치와 관계없이 원래 날짜에 남깁니다.
     // 결과적으로 하위작업이 일부만 완료된 경우, 상위작업과 미완료 하위작업만 이관되고
     // 완료된 하위작업은 원래 날짜의 최상위 작업으로 자연스럽게 노출됩니다.
+    // 이관되는 미완료 작업은 지난 날짜에 흔적을 남기지 않습니다. 사용자는 이관된
+    // 작업의 등록일(created_at) 표시를 통해 원래 생성일을 확인할 수 있습니다.
     for (const t of pastTasks) {
       if (t.status !== 'pending' && t.status !== 'in_progress') continue;
       allTaskIds.add(t.id);
-      // 'in_progress' 상태인 경우에만 과거 날짜에 대한 스냅샷(기억)을 남깁니다.
-      // 'pending' 상태는 스냅샷을 생성하지 않고 오늘 날짜로 조용히 이동합니다.
-      // (DB의 created_at을 통해 실제 생성일은 여전히 알 수 있습니다.)
-      if (t.status === 'in_progress') {
-        snapshots.push({
-          user_id: userId,
-          task_id: t.id,
-          snapshot_date: t.created_date,
-          status: t.status,
-        });
-      }
     }
 
     if (allTaskIds.size === 0) return 0;
@@ -480,15 +470,14 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
     const idsToUpdate = Array.from(allTaskIds);
     const promises: Promise<any>[] = [];
 
-    // 1. 기존 날짜에 대한 스냅샷 저장 (히스토리 보존)
-    if (snapshots.length > 0) {
-      // 중복 스냅샷 방지를 위해 task_id, snapshot_date 기준으로 upsert
-      promises.push(
-        supabase
-          .from('daily_task_snapshots')
-          .upsert(snapshots, { onConflict: 'task_id,snapshot_date' }) as unknown as Promise<any>
-      );
-    }
+    // 1. 이관 대상 태스크의 기존 스냅샷을 모두 삭제 (지난 날짜에서 노출되지 않도록).
+    //    과거 코드에서 생성된 잔여 스냅샷도 함께 정리됩니다.
+    promises.push(
+      supabase
+        .from('daily_task_snapshots')
+        .delete()
+        .in('task_id', idsToUpdate) as unknown as Promise<any>
+    );
 
     // 2. 태스크의 날짜를 오늘로 변경
     promises.push(
