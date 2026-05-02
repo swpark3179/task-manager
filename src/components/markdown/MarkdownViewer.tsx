@@ -22,10 +22,11 @@ export default function MarkdownViewer({ content }: MarkdownViewerProps) {
     const timer = setTimeout(() => {
       if (containerRef.current) {
         const mermaidBlocks = containerRef.current.querySelectorAll('code.language-mermaid');
+        const timestamp = Date.now();
         mermaidBlocks.forEach(async (block, index) => {
           const parent = block.parentElement;
           if (parent && parent.tagName === 'PRE') {
-            const id = `mermaid-${Date.now()}-${index}`;
+            const id = `mermaid-${timestamp}-${index}`;
             try {
               const { svg } = await mermaid.render(id, block.textContent || '');
               const wrapper = document.createElement('div');
