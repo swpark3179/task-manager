@@ -332,11 +332,11 @@ async function buildAndCacheCalendarData(
     }
 
     // 스케줄 처리
+    const mStartD = new Date(mStart);
+    const mEndD = new Date(mEnd);
     for (const schedule of schedules) {
       const sDate = new Date(schedule.start_date);
       const eDate = new Date(schedule.end_date);
-      const mStartD = new Date(mStart);
-      const mEndD = new Date(mEnd);
       let current = sDate < mStartD ? new Date(mStartD) : new Date(sDate);
       const endD = eDate > mEndD ? new Date(mEndD) : new Date(eDate);
 
@@ -355,7 +355,7 @@ async function buildAndCacheCalendarData(
     // Summary 계산
     const result = Array.from(dateMap.values());
     for (const cell of result) {
-      const summary: TaskStatusSummary = emptySummary();
+      const summary = cell.summary;
       for (const t of cell.tasks) {
         summary.total++;
         switch (t.status) {
@@ -365,7 +365,6 @@ async function buildAndCacheCalendarData(
           case 'discarded': summary.discarded++; break;
         }
       }
-      cell.summary = summary;
     }
 
     await calendarCache.set(yearMonth, result);
