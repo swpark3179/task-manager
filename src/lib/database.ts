@@ -3,7 +3,7 @@ import { taskCache, calendarCache, categoryCache, scheduleCache, updateTaskInAll
 import { v4 as uuidv4 } from 'uuid';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
-import { getTodayString } from '../utils/dateUtils';
+import { getTodayString, getDaysAgo } from '../utils/dateUtils';
 import {
   refreshScheduleNotification,
   cancelScheduleNotification,
@@ -498,6 +498,28 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
 
     return idsToUpdate.length;
   });
+}
+
+/**
+ * 마지막 접속일(lastActiveDate)과 7일 전 중 더 과거 날짜를 시작점으로 잡아
+ * 오늘로 이관합니다. TodayPage 진입, 데일리 요약 알림 예약, 자동 동기화에서
+ * 동일하게 사용되어 어느 경로로든 일관된 롤오버가 일어나도록 합니다.
+ */
+export async function rolloverFromLastActive(today: string = getTodayString()): Promise<void> {
+  const { Store } = await import('@tauri-apps/plugin-store');
+  const store = await Store.load('settings.json');
+  const lastDate = await store.get<string>('lastActiveDate');
+
+  const sevenDaysAgo = getDaysAgo(today, 7);
+  let startDate = sevenDaysAgo;
+  if (lastDate && lastDate < startDate) startDate = lastDate;
+
+  if (startDate < today) {
+    await rolloverTasks(startDate, today);
+  }
+
+  await store.set('lastActiveDate', today);
+  await store.save();
 }
 
 // =============================================

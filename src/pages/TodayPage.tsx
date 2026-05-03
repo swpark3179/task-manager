@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DayView from '../components/day/DayView';
-import { rolloverTasks } from '../lib/database';
-import { getTodayString, formatDateDisplay, getPrevDay, getNextDay, getDaysAgo } from '../utils/dateUtils';
+import { rolloverFromLastActive } from '../lib/database';
+import { getTodayString, formatDateDisplay, getPrevDay, getNextDay } from '../utils/dateUtils';
 import './Pages.css';
 
 export default function TodayPage() {
@@ -12,27 +12,7 @@ export default function TodayPage() {
   useEffect(() => {
     const init = async () => {
       try {
-        const { Store } = await import('@tauri-apps/plugin-store');
-        const store = await Store.load('settings.json');
-        const lastDate = await store.get<string>('lastActiveDate');
-
-        // 지난주(7일 전)부터 어제까지의 미완료 할일을 오늘로 이관
-        const sevenDaysAgo = getDaysAgo(today, 7);
-        
-        // 마지막 접속일과 7일 전 중 더 과거의 날짜를 시작점으로 잡아서 
-        // 오랫동안 접속하지 않았어도 누락되는 작업이 없도록 함
-        let startDate = sevenDaysAgo;
-        if (lastDate && lastDate < startDate) {
-          startDate = lastDate;
-        }
-
-        if (startDate < today) {
-          // startDate부터 today 직전까지의 모든 미완료 할일을 오늘로 이관
-          await rolloverTasks(startDate, today);
-        }
-
-        await store.set('lastActiveDate', today);
-        await store.save();
+        await rolloverFromLastActive(today);
       } catch (err) {
         console.error('Failed to initialize TodayPage:', err);
       }
