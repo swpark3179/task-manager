@@ -597,6 +597,56 @@
 .calendar-holiday-item.type-anniversary { color: #8b5cf6; }
 .calendar-holiday-item.type-birthday { color: #ec4899; }
 
+/* Holiday list — DayView (today + calendar day modal) */
+.holiday-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.holiday-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.holiday-list-item.type-holiday { border-left-color: var(--nord11); }
+.holiday-list-item.type-anniversary { border-left-color: #8b5cf6; }
+.holiday-list-item.type-birthday { border-left-color: #ec4899; }
+
+.holiday-list-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.holiday-list-item.type-holiday .holiday-list-dot { background: var(--nord11); }
+.holiday-list-item.type-anniversary .holiday-list-dot { background: #8b5cf6; }
+.holiday-list-item.type-birthday .holiday-list-dot { background: #ec4899; }
+
+.holiday-list-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.holiday-list-type {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
 .calendar-task-item {
   display: flex;
   align-items: center;

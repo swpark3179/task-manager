@@ -146,3 +146,34 @@ export function getKoreanHolidaysForYear(year: number): Holiday[] {
   }
   return out;
 }
+
+/**
+ * 특정 날짜(YYYY-MM-DD)에 해당하는 휴일/기념일/생일을 모아 반환합니다.
+ * - 빌트인 한국 공휴일 (해당 연도 기준 양력 고정 + 음력 기반)
+ * - 사용자 지정 항목 (recurring_yearly=true 인 항목은 해당 연도로 펼쳐서 매칭)
+ */
+export function getHolidaysForDate(date: string, userHolidays: Holiday[]): Holiday[] {
+  const yearStr = date.slice(0, 4);
+  const year = Number(yearStr);
+  const md = date.slice(5);
+
+  const out: Holiday[] = [];
+
+  if (!Number.isNaN(year)) {
+    for (const h of getKoreanHolidaysForYear(year)) {
+      if (h.date === date) out.push(h);
+    }
+  }
+
+  for (const h of userHolidays) {
+    if (h.recurring_yearly) {
+      if (h.date.slice(5) === md) {
+        out.push({ ...h, date });
+      }
+    } else if (h.date === date) {
+      out.push(h);
+    }
+  }
+
+  return out;
+}
