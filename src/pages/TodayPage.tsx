@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DayView from '../components/day/DayView';
+import WeeklySummaryWidget from '../components/common/WeeklySummaryWidget';
 import { rolloverFromLastActive } from '../lib/database';
 import { getTodayString, formatDateDisplay, getPrevDay, getNextDay } from '../utils/dateUtils';
 import './Pages.css';
@@ -39,6 +40,7 @@ export default function TodayPage() {
       </div>
 
       <div className="page-content">
+        <WeeklySummaryWidget referenceDate={today} />
         <DayView date={today} isToday={true} />
       </div>
     </div>
