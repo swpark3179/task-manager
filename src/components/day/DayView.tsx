@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import TaskList from '../tasks/TaskList';
 import ScheduleSection from '../schedules/ScheduleSection';
 import ScheduleModal from '../schedules/ScheduleModal';
 import {
   fetchTasksByDate,
   fetchSchedulesForDateRange,
+  fetchHolidays,
   createTask,
   updateTask,
   deleteTask,
@@ -15,13 +16,20 @@ import {
 } from '../../lib/database';
 import { useSyncStatus } from '../common/SyncIndicator';
 import { getScheduleFromMemoryCacheSync, getTasksFromMemoryCacheSync } from '../../lib/cache';
-import type { Schedule, Task } from '../../types';
+import { getHolidaysForDate } from '../../utils/koreanHolidays';
+import type { Holiday, HolidayType, Schedule, Task } from '../../types';
 
 interface DayViewProps {
   date: string;
   isToday: boolean;
   onMutate?: () => void;
 }
+
+const HOLIDAY_TYPE_LABEL: Record<HolidayType, string> = {
+  holiday: '공휴일',
+  anniversary: '기념일',
+  birthday: '생일',
+};
 
 export default function DayView({ date, isToday, onMutate }: DayViewProps) {
   const [tasks, setTasks] = useState<Task[]>(() => getTasksFromMemoryCacheSync(date) || []);
@@ -34,8 +42,14 @@ export default function DayView({ date, isToday, onMutate }: DayViewProps) {
   const [loading, setLoading] = useState(!getTasksFromMemoryCacheSync(date));
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [userHolidays, setUserHolidays] = useState<Holiday[]>([]);
   const syncStatus = useSyncStatus();
   const previousSyncStatusRef = useRef(syncStatus);
+
+  const holidays = useMemo(
+    () => getHolidaysForDate(date, userHolidays),
+    [date, userHolidays],
+  );
 
   const loadTasks = useCallback(async () => {
     try {
@@ -68,6 +82,10 @@ export default function DayView({ date, isToday, onMutate }: DayViewProps) {
     void loadTasks();
     void loadSchedules();
   }, [date, loadTasks, loadSchedules]);
+
+  useEffect(() => {
+    fetchHolidays().then(setUserHolidays).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const previousStatus = previousSyncStatusRef.current;
@@ -143,6 +161,26 @@ export default function DayView({ date, isToday, onMutate }: DayViewProps) {
 
   return (
     <div className="day-view">
+      {holidays.length > 0 && (
+        <section className="today-holidays-section" style={{ marginBottom: 'var(--space-lg)' }}>
+          <div className="holiday-list">
+            {holidays.map((h, i) => (
+              <div
+                key={`${h.id}-${i}`}
+                className={`holiday-list-item type-${h.type}`}
+              >
+                <span
+                  className="holiday-list-dot"
+                  aria-hidden="true"
+                  style={h.color ? { background: h.color } : undefined}
+                />
+                <span className="holiday-list-title">{h.title}</span>
+                <span className="holiday-list-type">{HOLIDAY_TYPE_LABEL[h.type]}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       <section className="today-schedules-section" style={{ marginBottom: 'var(--space-lg)' }}>
         <div className="modal-section-header" style={{ marginBottom: '8px' }}>
           <h2 className="today-section-title">일정</h2>
