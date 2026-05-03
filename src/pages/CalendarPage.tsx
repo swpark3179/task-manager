@@ -5,14 +5,16 @@ import { useRubberBandScroll } from '../hooks/useRubberBandScroll';
 import {
   fetchCalendarData,
   fetchCategories,
+  fetchHolidays,
 } from "../lib/database";
+import { getKoreanHolidaysForYear } from "../utils/koreanHolidays";
 import {
   getMonthCalendarGrid,
   formatDate,
   formatMonthYear,
   getTodayString,
 } from "../utils/dateUtils";
-import type { CalendarCellData, Category, Schedule } from "../types";
+import type { CalendarCellData, Category, Schedule, Holiday } from "../types";
 import { getCalendarFromMemoryCacheSync } from "../lib/cache";
 import ScheduleModal from "../components/schedules/ScheduleModal";
 import DayView from "../components/day/DayView";
@@ -68,6 +70,7 @@ export default function CalendarPage() {
   });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [userHolidays, setUserHolidays] = useState<Holiday[]>([]);
   const syncStatus = useSyncStatus();
 
   // Drag selection state
@@ -116,7 +119,39 @@ export default function CalendarPage() {
 
   useEffect(() => {
     fetchCategories().then(setCategories).catch(console.error);
+    fetchHolidays().then(setUserHolidays).catch(console.error);
   }, []);
+
+  // 표시 중인 연도의 빌트인 한국 공휴일 + 사용자 지정 항목을
+  // (YYYY-MM-DD → Holiday[]) 맵으로 합쳐 둡니다. 매년 반복 항목은
+  // 현재 보고 있는 연도로 펼쳐 줍니다.
+  const holidaysByDate = useMemo(() => {
+    const map = new Map<string, Holiday[]>();
+    const push = (h: Holiday) => {
+      const arr = map.get(h.date);
+      if (arr) arr.push(h);
+      else map.set(h.date, [h]);
+    };
+
+    // 캘린더 그리드는 인접 달까지 일부 날짜를 포함하므로,
+    // 표시 중인 연도와 그 양옆 연도까지 빌트인 공휴일을 펼쳐 둡니다.
+    for (const y of [year - 1, year, year + 1]) {
+      for (const h of getKoreanHolidaysForYear(y)) push(h);
+    }
+
+    for (const h of userHolidays) {
+      if (h.recurring_yearly) {
+        const md = h.date.slice(5); // MM-DD
+        for (const y of [year - 1, year, year + 1]) {
+          push({ ...h, date: `${y}-${md}` });
+        }
+      } else {
+        push(h);
+      }
+    }
+
+    return map;
+  }, [year, userHolidays]);
 
   const getCategoryColor = (categoryId?: string | null) => {
     if (!categoryId) return undefined;
@@ -728,11 +763,14 @@ export default function CalendarPage() {
                   const overflowCount =
                     hiddenSchedulesAtCell + Math.max(0, tasks.length - visibleTasks.length);
 
+                  const cellHolidays = holidaysByDate.get(dateStr) || [];
+                  const hasPublicHoliday = cellHolidays.some((h) => h.is_builtin || h.type === 'holiday');
+
                   return (
                     <div
                       key={dateStr}
                       data-date={dateStr}
-                      className={`calendar-cell ${isToday ? "today" : ""} ${cellData ? "has-data" : ""} ${isSunday ? "sunday" : ""} ${isSaturday ? "saturday" : ""} ${isDragging && dragStart && dragEnd && ((dragStart <= dragEnd && dateStr >= dragStart && dateStr <= dragEnd) || (dragStart > dragEnd && dateStr <= dragStart && dateStr >= dragEnd)) ? "selected" : ""}`}
+                      className={`calendar-cell ${isToday ? "today" : ""} ${cellData ? "has-data" : ""} ${isSunday || hasPublicHoliday ? "sunday" : ""} ${isSaturday ? "saturday" : ""} ${isDragging && dragStart && dragEnd && ((dragStart <= dragEnd && dateStr >= dragStart && dateStr <= dragEnd) || (dragStart > dragEnd && dateStr <= dragStart && dateStr >= dragEnd)) ? "selected" : ""}`}
                       style={{ ['--cell-lane-height' as string]: `${perCellLaneHeight[cIdx]}px` }}
                       onMouseDown={(e) => handleMouseDown(dateStr, e)}
                       onMouseEnter={() => handleMouseEnter(dateStr)}
@@ -742,6 +780,20 @@ export default function CalendarPage() {
                     >
                       <span className="calendar-cell-date">{date.getDate()}</span>
                       <div className="calendar-cell-body">
+                        {cellHolidays.length > 0 && (
+                          <div className="calendar-cell-holidays">
+                            {cellHolidays.map((h, i) => (
+                              <div
+                                key={`${h.id}-${i}`}
+                                className={`calendar-holiday-item type-${h.type}`}
+                                style={h.color ? { color: h.color } : undefined}
+                                title={h.title}
+                              >
+                                {h.title}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         {(visibleTasks.length > 0 || overflowCount > 0) && (
                           <div className="calendar-cell-tasks">
                             {visibleTasks.map((task) => {

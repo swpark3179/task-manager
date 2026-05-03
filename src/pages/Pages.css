@@ -572,6 +572,31 @@
   overflow: hidden;
 }
 
+.calendar-cell-holidays {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 2px;
+  overflow: hidden;
+}
+
+.calendar-holiday-item {
+  font-size: 10px;
+  line-height: 1.2;
+  padding: 1px 3px;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  position: relative;
+  z-index: 3;
+}
+
+.calendar-holiday-item.type-holiday { color: var(--nord11); }
+.calendar-holiday-item.type-anniversary { color: #8b5cf6; }
+.calendar-holiday-item.type-birthday { color: #ec4899; }
+
 .calendar-task-item {
   display: flex;
   align-items: center;

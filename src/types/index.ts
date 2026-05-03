@@ -94,6 +94,40 @@ export interface TaskStatusSummary {
   discarded: number;
 }
 
+export type HolidayType = 'holiday' | 'anniversary' | 'birthday';
+
+export interface Holiday {
+  id: string;
+  user_id: string;
+  // YYYY-MM-DD. recurring_yearly=true 인 경우 month/day 만 의미가 있으며
+  // 캘린더 렌더링 시 표시 중인 연도로 매년 펼쳐져 보입니다.
+  date: string;
+  title: string;
+  type: HolidayType;
+  recurring_yearly: boolean;
+  color: string | null;
+  created_at: string;
+  updated_at: string;
+  // Frontend-only: 빌트인 한국 공휴일은 DB에 저장되지 않으며 이 플래그로 구분됩니다.
+  is_builtin?: boolean;
+}
+
+export interface CreateHolidayInput {
+  date: string;
+  title: string;
+  type?: HolidayType;
+  recurring_yearly?: boolean;
+  color?: string | null;
+}
+
+export interface UpdateHolidayInput {
+  date?: string;
+  title?: string;
+  type?: HolidayType;
+  recurring_yearly?: boolean;
+  color?: string | null;
+}
+
 export interface CalendarCellData {
   date: string;
   tasks: DailyTaskSnapshot[];

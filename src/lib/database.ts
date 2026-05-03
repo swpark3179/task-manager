@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { taskCache, calendarCache, categoryCache, scheduleCache, updateTaskInAllCaches, removeTaskFromAllCaches, getCalendarFromMemoryCacheSync } from './cache';
+import { taskCache, calendarCache, categoryCache, scheduleCache, holidayCache, updateTaskInAllCaches, removeTaskFromAllCaches, getCalendarFromMemoryCacheSync } from './cache';
 import { v4 as uuidv4 } from 'uuid';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
@@ -12,7 +12,8 @@ import {
 import type {
   Task, Category, CalendarCellData,
   CreateTaskInput, UpdateTaskInput, TaskStatusSummary,
-  Schedule, CreateScheduleInput, UpdateScheduleInput
+  Schedule, CreateScheduleInput, UpdateScheduleInput,
+  Holiday, CreateHolidayInput, UpdateHolidayInput
 } from '../types';
 
 // =============================================
@@ -908,5 +909,84 @@ export async function deleteCategory(id: string): Promise<void> {
 
     if (error) throw error;
     await categoryCache.invalidate();
+  });
+}
+
+// =============================================
+// Holidays (사용자 지정 휴일 / 기념일 / 생일)
+// =============================================
+
+export async function fetchHolidays(): Promise<Holiday[]> {
+  const cached = await holidayCache.get();
+  if (cached) return cached;
+
+  return withSyncStatus(async () => {
+    const userId = await getCurrentUserId();
+    const { data, error } = await supabase
+      .from('holidays')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date', { ascending: true });
+
+    if (error) throw error;
+    const result = (data || []) as Holiday[];
+    await holidayCache.set(result);
+    return result;
+  });
+}
+
+export async function createHoliday(input: CreateHolidayInput): Promise<Holiday> {
+  const userId = await getCurrentUserId();
+  const id = uuidv4();
+  const now = new Date().toISOString();
+  const newHoliday: Holiday = {
+    id,
+    user_id: userId,
+    date: input.date,
+    title: input.title,
+    type: input.type ?? 'holiday',
+    recurring_yearly: input.recurring_yearly ?? true,
+    color: input.color ?? null,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const cached = (await holidayCache.get()) || [];
+  await holidayCache.set([...cached, newHoliday]);
+
+  runBackgroundSync(async () => {
+    const { error } = await supabase.from('holidays').insert([{
+      id: newHoliday.id,
+      user_id: newHoliday.user_id,
+      date: newHoliday.date,
+      title: newHoliday.title,
+      type: newHoliday.type,
+      recurring_yearly: newHoliday.recurring_yearly,
+      color: newHoliday.color,
+    }]);
+    if (error) throw error;
+  });
+
+  return newHoliday;
+}
+
+export async function updateHoliday(id: string, updates: UpdateHolidayInput): Promise<void> {
+  const cached = (await holidayCache.get()) || [];
+  const next = cached.map(h => h.id === id ? { ...h, ...updates, updated_at: new Date().toISOString() } : h);
+  await holidayCache.set(next);
+
+  runBackgroundSync(async () => {
+    const { error } = await supabase.from('holidays').update(updates).eq('id', id);
+    if (error) throw error;
+  });
+}
+
+export async function deleteHoliday(id: string): Promise<void> {
+  const cached = (await holidayCache.get()) || [];
+  await holidayCache.set(cached.filter(h => h.id !== id));
+
+  runBackgroundSync(async () => {
+    const { error } = await supabase.from('holidays').delete().eq('id', id);
+    if (error) throw error;
   });
 }
