@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { taskCache, calendarCache, categoryCache, scheduleCache } from './cache';
+import { taskCache, calendarCache, categoryCache, scheduleCache, holidayCache } from './cache';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { getTodayString } from '../utils/dateUtils';
 import { rescheduleAll } from './notifications';
@@ -232,6 +232,15 @@ export async function performFullSync(): Promise<void> {
       .order('start_date', { ascending: true });
     if (schError) throw schError;
     await scheduleCache.set(schedules || []);
+
+    // 4-2. Holidays 동기화 (사용자 지정 휴일/기념일/생일)
+    const { data: holidays, error: hError } = await supabase
+      .from('holidays')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date', { ascending: true });
+    if (hError) throw hError;
+    await holidayCache.set(holidays || []);
 
     // 5. Calendar 데이터 구축 (tasks + snapshots + schedules → 월별 캐시)
     await buildAndCacheCalendarData(

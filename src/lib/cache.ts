@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase } from 'idb';
-import type { Task, CalendarCellData, Category, Schedule } from '../types';
+import type { Task, CalendarCellData, Category, Schedule, Holiday } from '../types';
 
 // =============================================
 // IndexedDB Cache Module
@@ -7,7 +7,7 @@ import type { Task, CalendarCellData, Category, Schedule } from '../types';
 // =============================================
 
 const DB_NAME = 'task-manager-cache';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 interface CacheEntry<T> {
   data: T;
@@ -23,6 +23,7 @@ const CACHE_TTL = {
   history: 24 * 60 * 60 * 1000,      // 24 hours
   categories: Infinity,    // 동기화 시에만 갱신
   schedules: Infinity,     // 동기화 시에만 갱신
+  holidays: Infinity,      // 동기화 시에만 갱신
 };
 
 let dbPromise: Promise<IDBPDatabase> | null = null;
@@ -45,6 +46,9 @@ function getDB(): Promise<IDBPDatabase> {
         }
         if (!db.objectStoreNames.contains('schedules')) {
           db.createObjectStore('schedules');
+        }
+        if (!db.objectStoreNames.contains('holidays')) {
+          db.createObjectStore('holidays');
         }
       },
     });
@@ -405,6 +409,17 @@ export const scheduleCache = {
 };
 
 // =============================================
+// Holidays Cache (단일 키 'all'). 사용자 지정 휴일/기념일/생일.
+// 빌트인 한국 공휴일은 캐시되지 않고 매번 코드에서 생성됩니다.
+// =============================================
+
+export const holidayCache = {
+  get: () => getCached<Holiday[]>('holidays', 'all', CACHE_TTL.holidays),
+  set: (data: Holiday[]) => setCache('holidays', 'all', data),
+  invalidate: () => invalidateCache('holidays'),
+};
+
+// =============================================
 // Clear all caches (e.g., on logout)
 // =============================================
 
@@ -431,6 +446,7 @@ export async function clearAllCaches(): Promise<void> {
     await db.clear('calendar');
     await db.clear('categories');
     await db.clear('schedules');
+    await db.clear('holidays');
   } catch {
     // Non-critical
   }
