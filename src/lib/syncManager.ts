@@ -3,7 +3,7 @@ import { taskCache, calendarCache, categoryCache, scheduleCache } from './cache'
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { getTodayString } from '../utils/dateUtils';
 import { rescheduleAll } from './notifications';
-import { waitForBackgroundSyncs } from './database';
+import { waitForBackgroundSyncs, rolloverFromLastActive } from './database';
 import type { Task, CalendarCellData, TaskStatusSummary } from '../types';
 
 // =============================================
@@ -387,6 +387,10 @@ export function startAutoSync(): void {
   autoSyncTimer = setInterval(async () => {
     console.log('[SyncManager] Auto sync triggered');
     try {
+      // 앱이 켜져 있어도 자동 동기화 주기에 맞춰 날짜가 바뀌면
+      // 지난 날짜의 미완료 작업을 오늘로 이관해 둡니다. TodayPage 진입 전이라도
+      // 이관이 일어나도록 보장합니다.
+      await rolloverFromLastActive();
       await performFullSync();
     } catch {
       // silent

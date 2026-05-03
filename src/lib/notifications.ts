@@ -1,6 +1,6 @@
 import type { Schedule, Task } from '../types';
 import { scheduleCache, taskCache } from './cache';
-import { getDaysAgo, getTodayString } from '../utils/dateUtils';
+import { getTodayString } from '../utils/dateUtils';
 
 // =============================================
 // Local Scheduled Notifications
@@ -359,18 +359,8 @@ function addDays(date: Date, days: number): Date {
  */
 async function ensureRolloverBeforeSummary(today: string): Promise<void> {
   try {
-    const [{ Store }, { rolloverTasks }] = await Promise.all([
-      import('@tauri-apps/plugin-store'),
-      import('./database'),
-    ]);
-    const store = await Store.load('settings.json');
-    const lastDate = await store.get<string>('lastActiveDate');
-    const sevenDaysAgo = getDaysAgo(today, 7);
-    let startDate = sevenDaysAgo;
-    if (lastDate && lastDate < startDate) startDate = lastDate;
-    if (startDate < today) {
-      await rolloverTasks(startDate, today);
-    }
+    const { rolloverFromLastActive } = await import('./database');
+    await rolloverFromLastActive(today);
   } catch (err) {
     console.error('[notifications] rollover before daily summary failed:', err);
   }
