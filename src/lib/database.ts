@@ -453,16 +453,73 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
     if (error) throw error;
     if (!pastTasks || pastTasks.length === 0) return 0;
 
+    // 하위 leaf의 완료 여부 판정을 위해 과거 범위 밖에 있는 자손까지 모두 모아
+    // 전체 서브트리를 평가합니다. 하위가 다른 날짜에 흩어져 있는 경우에도
+    // (예: 이전 이관에서 뒤에 남은 완료된 하위, 미래 날짜에 추가된 미완료 하위)
+    // 정확하게 판단하기 위함입니다.
+    type SubtreeNode = { id: string; parent_id: string | null; status: string };
+    const tasksById = new Map<string, SubtreeNode>();
+    for (const t of pastTasks) {
+      tasksById.set(t.id, { id: t.id, parent_id: t.parent_id, status: t.status });
+    }
+    let frontier: string[] = pastTasks.map((t: any) => t.id);
+    while (frontier.length > 0) {
+      const { data: descendants, error: descErr } = await supabase
+        .from('tasks')
+        .select('id, parent_id, status')
+        .eq('user_id', userId)
+        .in('parent_id', frontier);
+      if (descErr) throw descErr;
+      if (!descendants || descendants.length === 0) break;
+      const next: string[] = [];
+      for (const d of descendants) {
+        if (tasksById.has(d.id)) continue;
+        tasksById.set(d.id, { id: d.id, parent_id: d.parent_id, status: d.status });
+        next.push(d.id);
+      }
+      frontier = next;
+    }
+
+    const childrenByParent = new Map<string, string[]>();
+    for (const t of tasksById.values()) {
+      if (!t.parent_id) continue;
+      if (!tasksById.has(t.parent_id)) continue;
+      const list = childrenByParent.get(t.parent_id);
+      if (list) list.push(t.id);
+      else childrenByParent.set(t.parent_id, [t.id]);
+    }
+
+    // 서브트리에 미완료(pending/in_progress) leaf가 하나라도 남아 있는지 판정.
+    // 모두 completed/discarded라면 사실상 완료된 것으로 간주합니다.
+    const incompleteMemo = new Map<string, boolean>();
+    const hasIncompleteLeaf = (id: string): boolean => {
+      const cached = incompleteMemo.get(id);
+      if (cached !== undefined) return cached;
+      const children = childrenByParent.get(id);
+      let result: boolean;
+      if (children && children.length > 0) {
+        result = children.some((cid) => hasIncompleteLeaf(cid));
+      } else {
+        const node = tasksById.get(id);
+        result = !!node && (node.status === 'pending' || node.status === 'in_progress');
+      }
+      incompleteMemo.set(id, result);
+      return result;
+    };
+
     const allTaskIds = new Set<string>();
 
     // 미완료(pending/in_progress) 작업만 이관합니다.
     // 완료(completed)/폐기(discarded) 작업은 트리상의 위치와 관계없이 원래 날짜에 남깁니다.
+    // 추가로, 저장된 상태가 미완료라 하더라도 하위 leaf가 모두 완료/폐기인 경우
+    // (= 사실상 완료된 상위작업) 이관하지 않습니다.
     // 결과적으로 하위작업이 일부만 완료된 경우, 상위작업과 미완료 하위작업만 이관되고
     // 완료된 하위작업은 원래 날짜의 최상위 작업으로 자연스럽게 노출됩니다.
     // 이관되는 미완료 작업은 지난 날짜에 흔적을 남기지 않습니다. 사용자는 이관된
     // 작업의 등록일(created_at) 표시를 통해 원래 생성일을 확인할 수 있습니다.
     for (const t of pastTasks) {
       if (t.status !== 'pending' && t.status !== 'in_progress') continue;
+      if (!hasIncompleteLeaf(t.id)) continue;
       allTaskIds.add(t.id);
     }
 
