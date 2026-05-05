@@ -232,12 +232,24 @@ jobs:
           brew install imagemagick
           find src-tauri/icons/ios/ src-tauri/gen/apple/ -type f -name "*.png" -exec mogrify -background white -alpha remove -alpha off {} + || true
 
-      - name: Patch Info.plist for Export Compliance
+      - name: Patch Info.plist for Export Compliance and Bundle Version
         run: |
-          echo "Patching Info.plist for ITSAppUsesNonExemptEncryption..."
+          # CFBundleVersion (build number) must be unique and monotonically
+          # increasing per upload to App Store Connect. Tauri reuses the
+          # marketing version for both, which causes 409 ENTITY_ERROR on
+          # re-uploads. Override CFBundleVersion with the workflow run number
+          # so every build gets a unique, increasing build number while keeping
+          # CFBundleShortVersionString as the semantic version from tauri.conf.json.
+          BUILD_NUMBER="${{ github.run_number }}"
+          echo "Using CFBundleVersion=$BUILD_NUMBER"
+
           for plist in $(find src-tauri/gen/apple -name "Info.plist"); do
+            echo "Patching $plist"
             /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$plist" || \
             /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$plist"
+
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$plist" || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" "$plist"
           done
           echo "Info.plist patched."
 
@@ -298,6 +310,7 @@ jobs:
           pbxproj = sys.argv[1]
           team = sys.argv[2]
           uuid = sys.argv[3]
+          build_number = sys.argv[4]
           with open(pbxproj) as f:
               content = f.read()
           def patch(match):
@@ -307,6 +320,7 @@ jobs:
                   "CODE_SIGN_IDENTITY": '"Apple Distribution"',
                   "PROVISIONING_PROFILE_SPECIFIER": f'"{uuid}"',
                   "IPHONEOS_DEPLOYMENT_TARGET": "15.0",
+                  "CURRENT_PROJECT_VERSION": build_number,
                   "OTHER_LDFLAGS": '("$(inherited)", "-Wl,-U,__swift_FORCE_LOAD_$_swiftCompatibility56", "-Wl,-U,__swift_FORCE_LOAD_$_swiftCompatibilityConcurrency")'
               }
               b = re.sub(r'DEVELOPMENT_TEAM = [^;]*;', f'DEVELOPMENT_TEAM = {team};', b)
@@ -323,11 +337,11 @@ jobs:
           print("pbxproj patched successfully")
           PYEOF
 
-          python3 /tmp/patch_pbxproj.py "$PBXPROJ" "${{ secrets.APPLE_DEVELOPMENT_TEAM }}" "${{ env.PROVISIONING_PROFILE_UUID }}"
+          python3 /tmp/patch_pbxproj.py "$PBXPROJ" "${{ secrets.APPLE_DEVELOPMENT_TEAM }}" "${{ env.PROVISIONING_PROFILE_UUID }}" "${{ github.run_number }}"
 
           # 패치 결과 확인
           echo "=== Verification ==="
-          grep -n "CODE_SIGN_STYLE\|PROVISIONING_PROFILE_SPECIFIER\|DEVELOPMENT_TEAM\|IPHONEOS_DEPLOYMENT_TARGET\|OTHER_LDFLAGS" "$PBXPROJ" | head -25
+          grep -n "CODE_SIGN_STYLE\|PROVISIONING_PROFILE_SPECIFIER\|DEVELOPMENT_TEAM\|IPHONEOS_DEPLOYMENT_TARGET\|OTHER_LDFLAGS\|CURRENT_PROJECT_VERSION" "$PBXPROJ" | head -25
 
       - name: Build iOS IPA
         # IOS_CERTIFICATE 미설정 → Tauri의 키체인 관리 건너뜀 (수동 키체인 사용)
