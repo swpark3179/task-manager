@@ -563,6 +563,11 @@ export default function CalendarPage() {
     setIsDayModalDragging(false);
     dayModalDragStartYRef.current = null;
     suppressDayModalTitleClickRef.current = false;
+    // Defensive: ensure no cell stays highlighted after the day modal closes,
+    // even if drag state lingered from the path that opened the modal.
+    setIsDragging(false);
+    setDragStart(null);
+    setDragEnd(null);
   }, []);
 
   useEffect(() => {
