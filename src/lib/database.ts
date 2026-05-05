@@ -656,7 +656,12 @@ async function fetchCalendarFromRemote(year: number, month: number): Promise<Cal
     }
 
     const cell = dateMap.get(date)!;
-    if (!cell.tasks.some((t) => t.task_id === task.id)) {
+    const existing = cell.tasks.find((t) => t.task_id === task.id);
+    if (existing) {
+      // Snapshots are captured once and never refreshed when status changes,
+      // so the live task is authoritative when both fall on the same date.
+      existing.status = task.status;
+    } else {
       cell.tasks.push({
         id: task.id,
         user_id: userId,
