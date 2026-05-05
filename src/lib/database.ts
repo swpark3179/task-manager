@@ -820,11 +820,15 @@ export async function createSchedule(input: CreateScheduleInput): Promise<Schedu
       .insert([{
         id: newSchedule.id,
         user_id: newSchedule.user_id,
+        category_id: newSchedule.category_id,
         title: newSchedule.title,
         description: newSchedule.description,
         start_date: newSchedule.start_date,
         end_date: newSchedule.end_date,
+        estimated_time: newSchedule.estimated_time,
+        scheduled_time: newSchedule.scheduled_time,
         notify_at: newSchedule.notify_at,
+        notify_offset_minutes: newSchedule.notify_offset_minutes,
       }]);
     if (error) throw error;
   });
