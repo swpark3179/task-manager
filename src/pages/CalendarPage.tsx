@@ -82,6 +82,9 @@ export default function CalendarPage() {
   const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
   const [dayModalDragOffset, setDayModalDragOffset] = useState(0);
   const [isDayModalDragging, setIsDayModalDragging] = useState(false);
+  const [hiddenFilters, setHiddenFilters] = useState<Set<string>>(new Set());
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
 
   // Touch and Long Press state
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -114,6 +117,17 @@ export default function CalendarPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showYearMonthPicker]);
+
+  useEffect(() => {
+    if (!showFilterPanel) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target as Node)) {
+        setShowFilterPanel(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showFilterPanel]);
 
 
 
@@ -158,6 +172,34 @@ export default function CalendarPage() {
     const cat = categories.find((c) => c.id === categoryId);
     return cat?.color || undefined;
   };
+
+  const filterItems = useMemo(() => {
+    const holidayTypes = [
+      { id: '__holiday', label: '공휴일', color: 'var(--nord11)' },
+      { id: '__anniversary', label: '기념일', color: '#8b5cf6' },
+      { id: '__birthday', label: '생일', color: '#ec4899' },
+    ];
+    const categoryItems = [
+      ...categories.map(cat => ({
+        id: cat.id,
+        label: cat.name,
+        color: cat.color || 'var(--accent-primary)',
+      })),
+      { id: '__no_category', label: '카테고리 없음', color: 'var(--text-muted)' },
+    ];
+    return { holidayTypes, categoryItems };
+  }, [categories]);
+
+  const toggleFilter = (filterId: string) => {
+    setHiddenFilters(prev => {
+      const next = new Set(prev);
+      if (next.has(filterId)) next.delete(filterId);
+      else next.add(filterId);
+      return next;
+    });
+  };
+
+  const clearFilters = () => setHiddenFilters(new Set());
 
   const loadCalendarData = useCallback(async (cancelledRef?: { current: boolean }) => {
     const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
@@ -330,7 +372,10 @@ export default function CalendarPage() {
       if (!d) continue;
       const ds = formatDate(d);
       const cell = getCellData(ds);
-      cell?.schedules?.forEach((s) => scheduleMap.set(s.id, s));
+      cell?.schedules?.forEach((s) => {
+        const filterId = s.category_id ?? '__no_category';
+        if (!hiddenFilters.has(filterId)) scheduleMap.set(s.id, s);
+      });
     }
 
     type Pending = Omit<ScheduleBar, "lane">;
@@ -682,6 +727,68 @@ export default function CalendarPage() {
           <button className="calendar-nav-today" onClick={goToToday} aria-label="오늘로 이동">
             오늘
           </button>
+          <div className="calendar-filter-wrapper" ref={filterPanelRef}>
+            <button
+              type="button"
+              className={`calendar-nav-btn calendar-filter-btn${hiddenFilters.size > 0 ? ' has-active' : ''}`}
+              onClick={() => setShowFilterPanel(v => !v)}
+              aria-label="카테고리 필터"
+              title="카테고리 필터"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+              </svg>
+              {hiddenFilters.size > 0 && (
+                <span className="calendar-filter-badge">{hiddenFilters.size}</span>
+              )}
+            </button>
+            {showFilterPanel && (
+              <div className="calendar-filter-panel">
+                <div className="calendar-filter-panel-header">
+                  <span className="calendar-filter-panel-title">필터</span>
+                  {hiddenFilters.size > 0 && (
+                    <button type="button" className="calendar-filter-reset" onClick={clearFilters}>
+                      초기화
+                    </button>
+                  )}
+                </div>
+                <div className="calendar-filter-section">
+                  <div className="calendar-filter-section-label">공휴일 유형</div>
+                  <div className="calendar-filter-chips">
+                    {filterItems.holidayTypes.map(item => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`calendar-filter-chip${hiddenFilters.has(item.id) ? ' chip-hidden' : ''}`}
+                        style={{ '--chip-color': item.color } as React.CSSProperties}
+                        onClick={() => toggleFilter(item.id)}
+                      >
+                        <span className="calendar-filter-chip-dot" />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="calendar-filter-section">
+                  <div className="calendar-filter-section-label">카테고리</div>
+                  <div className="calendar-filter-chips">
+                    {filterItems.categoryItems.map(item => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`calendar-filter-chip${hiddenFilters.has(item.id) ? ' chip-hidden' : ''}`}
+                        style={{ '--chip-color': item.color } as React.CSSProperties}
+                        onClick={() => toggleFilter(item.id)}
+                      >
+                        <span className="calendar-filter-chip-dot" />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="calendar-header-row calendar-header-fixed">
@@ -756,7 +863,11 @@ export default function CalendarPage() {
                   const dayOfWeek = date.getDay();
                   const isSunday = dayOfWeek === 0;
                   const isSaturday = dayOfWeek === 6;
-                  const tasks = (cellData?.tasks || []).filter(t => !t.is_snapshot);
+                  const tasks = (cellData?.tasks || []).filter(t => {
+                    if (t.is_snapshot) return false;
+                    const filterId = t.category_id ?? '__no_category';
+                    return !hiddenFilters.has(filterId);
+                  });
 
                   // Combined display cap: schedules occupy lane slots first, tasks
                   // fill the remainder, and any leftover items collapse into a
@@ -768,7 +879,9 @@ export default function CalendarPage() {
                   const overflowCount =
                     hiddenSchedulesAtCell + Math.max(0, tasks.length - visibleTasks.length);
 
-                  const cellHolidays = holidaysByDate.get(dateStr) || [];
+                  const cellHolidays = (holidaysByDate.get(dateStr) || []).filter(
+                    h => !hiddenFilters.has(`__${h.type}`)
+                  );
                   const hasPublicHoliday = cellHolidays.some((h) => h.is_builtin || h.type === 'holiday');
 
                   return (
