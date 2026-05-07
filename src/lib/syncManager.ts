@@ -177,7 +177,10 @@ export async function performFullSync(): Promise<void> {
         bucketIdsByDate.set(date, new Set(bucket.map((t) => t.id)));
       }
 
-      // 스냅샷 날짜에도 해당 태스크를 캐시에 추가 (is_snapshot 플래그)
+      // 스냅샷 날짜에도 해당 태스크를 캐시에 추가 (is_snapshot 플래그).
+      // 또한, 같은 날짜에 task가 직접 있는 경우(=사용자가 그 날 작업하면서
+      // 진행 스냅샷을 남긴 경우) 해당 task에 has_snapshot 플래그를 세워
+      // 상세 탭의 토글 버튼 상태가 즉시 반영되도록 합니다.
       for (const snap of snapshots) {
         const date = snap.snapshot_date;
         if (!tasksByDate.has(date)) {
@@ -186,12 +189,22 @@ export async function performFullSync(): Promise<void> {
         }
 
         const bucketIds = bucketIdsByDate.get(date)!;
+        const bucket = tasksByDate.get(date)!;
         if (!bucketIds.has(snap.task_id)) {
           // 원본 태스크 찾기
           const original = allTasksMap.get(snap.task_id);
           if (original) {
-            tasksByDate.get(date)!.push({ ...original, is_snapshot: true } as Task);
+            bucket.push({ ...original, is_snapshot: true } as Task);
             bucketIds.add(snap.task_id);
+          }
+        } else {
+          // 같은 날짜에 라이브 태스크가 있는 경우 has_snapshot 플래그를 추가합니다.
+          for (let i = 0; i < bucket.length; i++) {
+            const t = bucket[i];
+            if (t.id === snap.task_id && !t.is_snapshot) {
+              bucket[i] = { ...t, has_snapshot: true } as Task;
+              break;
+            }
           }
         }
       }

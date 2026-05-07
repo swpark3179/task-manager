@@ -14,10 +14,12 @@ interface TaskDetailProps {
   task: Task;
   onSaveDescription: (taskId: string, description: string) => void;
   onAddChild: (parentId: string, title: string) => void;
+  onCreateSnapshot?: (taskId: string) => void;
+  onDeleteSnapshot?: (taskId: string) => void;
 }
 
 export default function TaskDetail({
-  task, onSaveDescription, onAddChild
+  task, onSaveDescription, onAddChild, onCreateSnapshot, onDeleteSnapshot
 , children
 }: TaskDetailProps) {
   const navigate = useNavigate();
@@ -49,6 +51,15 @@ export default function TaskDetail({
     { id: 'description' as const, label: '세부 내용', show: true },
     { id: 'children' as const, label: childrenTabLabel, show: !isFinished || (task.children && task.children.length > 0) },
   ].filter(t => t.show), [childrenTabLabel, isFinished, task.children]);
+
+  // "오늘 진행 기록" 버튼은 오늘의 할일 화면에서, 아직 끝나지 않은 작업에만 표시합니다.
+  // is_snapshot(다른 날짜의 진행 기록 표시용 행)에서는 노출하지 않습니다.
+  const showSnapshotButton =
+    !task.is_snapshot &&
+    !isFinished &&
+    task.created_date === getTodayString() &&
+    !!onCreateSnapshot &&
+    !!onDeleteSnapshot;
 
   const handleSaveDescription = () => {
     onSaveDescription(task.id, descriptionDraft);
@@ -86,6 +97,39 @@ export default function TaskDetail({
             {tab.label}
             </button>
         ))}
+        {showSnapshotButton && (
+          <button
+            type="button"
+            className={`task-detail-snapshot-btn ${task.has_snapshot ? 'active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (task.has_snapshot) {
+                onDeleteSnapshot?.(task.id);
+              } else {
+                onCreateSnapshot?.(task.id);
+              }
+            }}
+            title={task.has_snapshot
+              ? '오늘의 진행 기록을 취소합니다'
+              : '오늘 진행 중임을 기록으로 남깁니다'}
+          >
+            {task.has_snapshot ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" fill="currentColor" />
+                </svg>
+                <span>오늘 진행 기록됨</span>
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                </svg>
+                <span>오늘 진행 기록</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       <div className="task-detail-content">

@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Task } from '../../types';
 import TaskSettingsModal from './modals/TaskSettingsModal';
 import TaskCheckbox from './TaskCheckbox';
 import TaskTree from './TaskTree';
 import TaskDetail from './TaskDetail';
 import { hasChildren, getEffectiveStatus } from '../../utils/taskUtils';
-import { formatShortDate, formatTimestamp } from '../../utils/dateUtils';
+import { formatShortDate, formatTimestamp, getTodayString } from '../../utils/dateUtils';
 import './Tasks.css';
 
 interface TaskItemProps {
@@ -20,12 +21,16 @@ interface TaskItemProps {
   onUpdateSettings: (id: string, updates: { title?: string; category_id?: string | null; low_priority?: boolean }) => void;
   onAddChild: (parentId: string, title: string) => void;
   onSaveDescription: (taskId: string, description: string) => void;
+  onCreateSnapshot?: (taskId: string) => void;
+  onDeleteSnapshot?: (taskId: string) => void;
 }
 
 export default function TaskItem({
   task, depth = 0, onComplete, onUncomplete, onDiscard, onUndiscard, onDelete,
-  onUpdateSettings, onAddChild, onSaveDescription
+  onUpdateSettings, onAddChild, onSaveDescription,
+  onCreateSnapshot, onDeleteSnapshot
 }: TaskItemProps) {
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -51,20 +56,40 @@ export default function TaskItem({
   const showDiscardDate = !!discardDate && effectiveStatus === 'discarded' && showFinishDate;
 
 
+  // is_snapshot 행은 "그 날 작업했음"의 흔적이므로, 체크박스는 숨기고
+  // 해당 작업의 현재 위치(원본)로 이동할 수 있는 링크 버튼을 대신 노출합니다.
+  const handleNavigateToOriginal = () => {
+    const today = getTodayString();
+    const dest = task.created_date === today ? '/' : `/history/${task.created_date}`;
+    navigate(dest);
+  };
+
   return (
     <div
-      className={`task-item ${isCompleted ? 'completed' : ''} ${isDiscarded ? 'discarded' : ''} ${expanded ? 'expanded' : ''}`}
+      className={`task-item ${isCompleted ? 'completed' : ''} ${isDiscarded ? 'discarded' : ''} ${expanded ? 'expanded' : ''} ${task.is_snapshot ? 'snapshot' : ''}`}
       style={{ '--depth': depth } as React.CSSProperties}
     >
       <div className="task-item-main" onClick={() => setExpanded(!expanded)}>
-        <TaskCheckbox
-          status={effectiveStatus}
-          disabled={isParent || task.is_snapshot}
-          onComplete={task.is_snapshot ? () => {} : () => onComplete(task.id)}
-          onUncomplete={task.is_snapshot ? undefined : (onUncomplete ? () => onUncomplete(task.id) : undefined)}
-          onDiscard={task.is_snapshot ? () => {} : () => onDiscard(task.id)}
-          onUndiscard={task.is_snapshot ? undefined : (onUndiscard ? () => onUndiscard(task.id) : undefined)}
-        />
+        {task.is_snapshot ? (
+          <span
+            className="task-item-snapshot-marker"
+            title="이 날 진행한 흔적입니다"
+            aria-label="진행 기록"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+          </span>
+        ) : (
+          <TaskCheckbox
+            status={effectiveStatus}
+            disabled={isParent}
+            onComplete={() => onComplete(task.id)}
+            onUncomplete={onUncomplete ? () => onUncomplete(task.id) : undefined}
+            onDiscard={() => onDiscard(task.id)}
+            onUndiscard={onUndiscard ? () => onUndiscard(task.id) : undefined}
+          />
+        )}
 
         <div className="task-item-content">
           <span
@@ -106,6 +131,20 @@ export default function TaskItem({
         </div>
 
         <div className="task-item-actions" onClick={e => e.stopPropagation()}>
+          {task.is_snapshot && (
+            <button
+              className="btn btn-ghost btn-icon btn-sm task-item-original-link"
+              onClick={(e) => { e.stopPropagation(); handleNavigateToOriginal(); }}
+              title="원본 작업으로 이동"
+              aria-label="원본 작업으로 이동"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+                <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+              </svg>
+            </button>
+          )}
           <button
             className="btn btn-ghost btn-icon btn-sm task-item-expand"
             onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
@@ -152,6 +191,8 @@ export default function TaskItem({
             task={task}
             onSaveDescription={onSaveDescription}
             onAddChild={onAddChild}
+            onCreateSnapshot={onCreateSnapshot}
+            onDeleteSnapshot={onDeleteSnapshot}
           >
             {isParent && (
               <TaskTree
@@ -165,6 +206,8 @@ export default function TaskItem({
                 onUpdateSettings={onUpdateSettings}
                 onAddChild={onAddChild}
                 onSaveDescription={onSaveDescription}
+                onCreateSnapshot={onCreateSnapshot}
+                onDeleteSnapshot={onDeleteSnapshot}
               />
             )}
           </TaskDetail>
