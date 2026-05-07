@@ -18,12 +18,15 @@ interface TaskListProps {
   onUpdateSettings: (id: string, updates: { title?: string; category_id?: string | null; low_priority?: boolean }) => void;
   onAddChild: (parentId: string, title: string) => void;
   onSaveDescription: (taskId: string, description: string) => void;
+  onCreateSnapshot?: (taskId: string) => void;
+  onDeleteSnapshot?: (taskId: string) => void;
   isHistory?: boolean;
 }
 
 export default function TaskList({
   tasks, loading, onAddTask, onComplete, onUncomplete, onDiscard, onUndiscard,
-  onDelete, onUpdateSettings, onAddChild, onSaveDescription, isHistory
+  onDelete, onUpdateSettings, onAddChild, onSaveDescription,
+  onCreateSnapshot, onDeleteSnapshot, isHistory
 }: TaskListProps) {
   const [viewMode, setViewMode] = useState<'tree' | 'leaf'>('tree');
   const [statusFilter, setStatusFilter] = useState<TaskStatus | null>(null);
@@ -176,6 +179,8 @@ export default function TaskList({
             onUpdateSettings={onUpdateSettings}
             onAddChild={onAddChild}
             onSaveDescription={onSaveDescription}
+            onCreateSnapshot={onCreateSnapshot}
+            onDeleteSnapshot={onDeleteSnapshot}
             showAddInput={false}
           />
 
@@ -211,6 +216,8 @@ export default function TaskList({
                     onUpdateSettings={onUpdateSettings}
                     onAddChild={onAddChild}
                     onSaveDescription={onSaveDescription}
+                    onCreateSnapshot={onCreateSnapshot}
+                    onDeleteSnapshot={onDeleteSnapshot}
                     showAddInput={false}
                   />
                 </div>

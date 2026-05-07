@@ -13,6 +13,8 @@ import {
   uncompleteTask,
   discardTask,
   undiscardTask,
+  createTaskSnapshot,
+  deleteTaskSnapshot,
 } from '../../lib/database';
 import { useSyncStatus } from '../common/SyncIndicator';
 import { getScheduleFromMemoryCacheSync, getTasksFromMemoryCacheSync } from '../../lib/cache';
@@ -149,6 +151,24 @@ export default function DayView({ date, isToday, onMutate }: DayViewProps) {
     }
   };
 
+  const handleCreateSnapshot = async (taskId: string) => {
+    try {
+      await createTaskSnapshot(taskId, date);
+      await refresh();
+    } catch (err) {
+      console.error('Failed to create task snapshot:', err);
+    }
+  };
+
+  const handleDeleteSnapshot = async (taskId: string) => {
+    try {
+      await deleteTaskSnapshot(taskId, date);
+      await refresh();
+    } catch (err) {
+      console.error('Failed to delete task snapshot:', err);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('이 할일을 삭제하시겠습니까? 하위 할일도 모두 삭제됩니다.')) return;
     try {
@@ -219,6 +239,8 @@ export default function DayView({ date, isToday, onMutate }: DayViewProps) {
           onUpdateSettings={handleUpdateSettings}
           onAddChild={handleAddChild}
           onSaveDescription={handleSaveDescription}
+          onCreateSnapshot={isToday ? handleCreateSnapshot : undefined}
+          onDeleteSnapshot={isToday ? handleDeleteSnapshot : undefined}
         />
       </section>
 

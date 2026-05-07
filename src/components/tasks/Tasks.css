@@ -354,9 +354,67 @@
 
 .task-detail-tabs {
   display: flex;
+  align-items: center;
   gap: 2px;
   border-bottom: 1px solid var(--border-light);
   margin-bottom: var(--space-md);
+}
+
+.task-detail-snapshot-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  align-self: center;
+  margin-bottom: 4px;
+}
+
+.task-detail-snapshot-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-light);
+}
+
+.task-detail-snapshot-btn.active {
+  border-color: var(--accent-primary);
+  background: var(--accent-light);
+  color: var(--accent-primary);
+}
+
+.task-detail-snapshot-btn.active:hover {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border-color: var(--border-color);
+}
+
+.task-item-snapshot-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: var(--accent-primary);
+  opacity: 0.7;
+}
+
+.task-item.snapshot {
+  border-style: dashed;
+  background: var(--bg-tertiary);
+}
+
+.task-item-original-link:hover {
+  color: var(--accent-primary) !important;
 }
 
 .task-detail-tab {

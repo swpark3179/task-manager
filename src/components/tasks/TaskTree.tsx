@@ -15,6 +15,8 @@ interface TaskTreeProps {
   onUpdateSettings: (id: string, updates: { title?: string; category_id?: string | null; low_priority?: boolean }) => void;
   onAddChild: (parentId: string, title: string) => void;
   onSaveDescription: (taskId: string, description: string) => void;
+  onCreateSnapshot?: (taskId: string) => void;
+  onDeleteSnapshot?: (taskId: string) => void;
   parentId?: string;
   showAddInput?: boolean;
 }
@@ -22,6 +24,7 @@ interface TaskTreeProps {
 export default function TaskTree({
   tasks, depth = 0, onComplete, onUncomplete, onDiscard, onUndiscard, onDelete,
   onUpdateSettings, onAddChild, onSaveDescription,
+  onCreateSnapshot, onDeleteSnapshot,
   parentId, showAddInput = true
 }: TaskTreeProps) {
   return (
@@ -41,6 +44,8 @@ export default function TaskTree({
           onAddChild={onAddChild}
 
           onSaveDescription={onSaveDescription}
+          onCreateSnapshot={onCreateSnapshot}
+          onDeleteSnapshot={onDeleteSnapshot}
         />
       ))}
 

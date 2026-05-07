@@ -51,6 +51,9 @@ export interface Task {
   // Frontend-only (not stored in DB)
   children?: Task[];
   is_snapshot?: boolean;
+  // Frontend-only: 사용자가 작업의 created_date에 직접 진행 스냅샷을 남겨두었는지 여부.
+  // 상세 탭의 "오늘 진행 기록" 토글 버튼이 이 값을 기준으로 활성/비활성 상태를 보여줍니다.
+  has_snapshot?: boolean;
   // Frontend-only: 상위작업이 다른 날짜에 있을 때 표시용 메타데이터.
   // 완료된 하위작업이 원래 날짜에 남았을 때, 이관된 상위작업으로 이동할 수 있는 링크를 제공합니다.
   parent_info?: {

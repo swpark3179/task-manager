@@ -188,6 +188,14 @@ export async function fetchTasksByDate(date: string): Promise<Task[]> {
           tasks = [...tasks, ...pastTasks.map((t: any) => ({ ...t, is_snapshot: true }))];
         }
       }
+
+      // 사용자가 직접 남겨둔 진행 스냅샷이 현재 보고 있는 날짜에 존재하는지
+      // 표시용 플래그로 노출합니다. UI(상세 탭의 "오늘 진행 기록" 버튼)에서
+      // 토글 상태를 즉시 보여주기 위해 사용합니다.
+      const snapshotIdSet = new Set(snapshotTaskIds);
+      tasks = tasks.map((t) =>
+        snapshotIdSet.has(t.id) && !t.is_snapshot ? { ...t, has_snapshot: true } : t
+      );
     }
 
     // 이관 후 원래 날짜에 남아있는 완료/폐기된 하위작업을 부모 트리에 다시 붙여 보여주기 위해
@@ -360,11 +368,14 @@ export async function uncompleteTask(id: string): Promise<void> {
 
 export async function completeTask(id: string): Promise<void> {
   const now = new Date().toISOString();
+  const today = getTodayString();
 
-  // Optimistic update
+  // Optimistic update — also clear has_snapshot flag because the manual
+  // progress snapshot for today is removed when the task itself completes.
   await updateTaskInAllCaches(id, {
     status: 'completed',
-    completed_at: now
+    completed_at: now,
+    has_snapshot: false,
   });
   await calendarCache.invalidate();
 
@@ -375,6 +386,14 @@ export async function completeTask(id: string): Promise<void> {
     };
     const { error } = await supabase.from('tasks').update(updates).eq('id', id);
     if (error) throw error;
+    // 오늘 작업을 완료했다면 사용자가 남긴 오늘 날짜 진행 스냅샷은 더 이상
+    // 필요 없으므로 함께 정리합니다.
+    const { error: snapErr } = await supabase
+      .from('daily_task_snapshots')
+      .delete()
+      .eq('task_id', id)
+      .eq('snapshot_date', today);
+    if (snapErr) throw snapErr;
   });
 }
 
@@ -424,6 +443,52 @@ export async function discardTask(id: string): Promise<void> {
 // =============================================
 // Progress Logs
 // =============================================
+
+
+// =============================================
+// Manual Progress Snapshots
+// =============================================
+//
+// 사용자가 작업을 완료하지 않았지만 "오늘 어느 정도 진행했다"는 흔적을
+// 남기고 싶을 때 호출됩니다. daily_task_snapshots 테이블에 기록되어
+// 이관(롤오버) 이후에도 원래 날짜의 히스토리/캘린더에 남아있게 됩니다.
+
+export async function createTaskSnapshot(taskId: string, date: string): Promise<void> {
+  const userId = await getCurrentUserId();
+
+  // Optimistic flag — UI는 즉시 "기록됨" 상태를 보여줍니다.
+  await updateTaskInAllCaches(taskId, { has_snapshot: true });
+  await calendarCache.invalidate();
+
+  runBackgroundSync(async () => {
+    const { error } = await supabase
+      .from('daily_task_snapshots')
+      .upsert(
+        {
+          user_id: userId,
+          task_id: taskId,
+          snapshot_date: date,
+          status: 'in_progress',
+        },
+        { onConflict: 'task_id,snapshot_date' }
+      );
+    if (error) throw error;
+  });
+}
+
+export async function deleteTaskSnapshot(taskId: string, date: string): Promise<void> {
+  await updateTaskInAllCaches(taskId, { has_snapshot: false });
+  await calendarCache.invalidate();
+
+  runBackgroundSync(async () => {
+    const { error } = await supabase
+      .from('daily_task_snapshots')
+      .delete()
+      .eq('task_id', taskId)
+      .eq('snapshot_date', date);
+    if (error) throw error;
+  });
+}
 
 
 // =============================================
@@ -528,13 +593,15 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
     const idsToUpdate = Array.from(allTaskIds);
     const promises: Promise<any>[] = [];
 
-    // 1. 이관 대상 태스크의 기존 스냅샷을 모두 삭제 (지난 날짜에서 노출되지 않도록).
-    //    과거 코드에서 생성된 잔여 스냅샷도 함께 정리됩니다.
+    // 1. 이관 대상 태스크의 스냅샷 중 toDate(이관 목적일) 이후의 항목만 삭제.
+    //    과거 날짜에 사용자가 직접 남겨둔 진행 스냅샷은 그대로 보존하여
+    //    "그 날 작업을 진행했다"는 흔적을 히스토리에서 확인할 수 있게 합니다.
     promises.push(
       supabase
         .from('daily_task_snapshots')
         .delete()
-        .in('task_id', idsToUpdate) as unknown as Promise<any>
+        .in('task_id', idsToUpdate)
+        .gte('snapshot_date', toDate) as unknown as Promise<any>
     );
 
     // 2. 태스크의 날짜를 오늘로 변경
