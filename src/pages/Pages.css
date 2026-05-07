@@ -248,15 +248,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 40px;
   height: 40px;
-  padding: 0 16px;
+  padding: 0;
   border-radius: var(--radius-md);
   background: var(--accent-primary);
   color: #fff;
   border: 1px solid var(--accent-primary);
-  font-size: 0.875rem;
-  font-weight: 600;
   cursor: pointer;
+  flex-shrink: 0;
   transition: filter var(--transition-fast), transform var(--transition-fast);
 }
 
@@ -265,7 +265,7 @@
 }
 
 .calendar-nav-today:active {
-  transform: scale(0.96);
+  transform: scale(0.94);
 }
 
 .calendar-grid {
@@ -332,6 +332,7 @@
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .calendar-cell-body {
@@ -345,8 +346,18 @@
   z-index: 2;
 }
 
-.calendar-cell:hover {
-  background: var(--bg-hover);
+@media (hover: hover) {
+  .calendar-cell:hover {
+    background: var(--bg-hover);
+  }
+
+  .calendar-cell.empty:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .calendar-cell.today:hover {
+    background: rgba(94, 129, 172, 0.15);
+  }
 }
 
 .calendar-cell.empty {
@@ -354,16 +365,8 @@
   cursor: default;
 }
 
-.calendar-cell.empty:hover {
-  background: var(--bg-tertiary);
-}
-
 .calendar-cell.today {
   background: var(--accent-light);
-}
-
-.calendar-cell.today:hover {
-  background: rgba(94, 129, 172, 0.15);
 }
 
 .calendar-cell-date {

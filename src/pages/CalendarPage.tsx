@@ -613,6 +613,14 @@ export default function CalendarPage() {
     setIsDragging(false);
     setDragStart(null);
     setDragEnd(null);
+    // Mobile browsers keep :hover/:focus on the tapped cell until another
+    // element is touched, which makes the previously selected cell appear
+    // stuck in its highlighted state after the modal closes. Drop focus so
+    // the cell visually deselects right away.
+    if (typeof document !== 'undefined') {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) active.blur();
+    }
   }, []);
 
   useEffect(() => {
@@ -724,8 +732,28 @@ export default function CalendarPage() {
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
-          <button className="calendar-nav-today" onClick={goToToday} aria-label="오늘로 이동">
-            오늘
+          <button
+            className="calendar-nav-today"
+            onClick={goToToday}
+            aria-label="오늘로 이동"
+            title="오늘로 이동"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+              <circle cx="12" cy="16" r="1.6" fill="currentColor" stroke="none" />
+            </svg>
           </button>
           <div className="calendar-filter-wrapper" ref={filterPanelRef}>
             <button

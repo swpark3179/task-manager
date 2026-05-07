@@ -241,6 +241,7 @@ export default function DayView({ date, isToday, onMutate }: DayViewProps) {
           onSaveDescription={handleSaveDescription}
           onCreateSnapshot={isToday ? handleCreateSnapshot : undefined}
           onDeleteSnapshot={isToday ? handleDeleteSnapshot : undefined}
+          sortByStatus={isToday}
         />
       </section>
 
