@@ -1,7 +1,7 @@
 import type { Task, TaskStatus } from '../../types';
 import TaskTree from './TaskTree';
 import TaskInput from './TaskInput';
-import { calculateStatusSummary, getLeafTasks, filterTasksByStatus } from '../../utils/taskUtils';
+import { calculateStatusSummary, getLeafTasks, filterTasksByStatus, getEffectiveStatus } from '../../utils/taskUtils';
 import { useState, useMemo, useCallback } from 'react';
 import './Tasks.css';
 
@@ -21,12 +21,28 @@ interface TaskListProps {
   onCreateSnapshot?: (taskId: string) => void;
   onDeleteSnapshot?: (taskId: string) => void;
   isHistory?: boolean;
+  sortByStatus?: boolean;
+}
+
+const STATUS_SORT_ORDER: Record<TaskStatus, number> = {
+  in_progress: 0,
+  pending: 1,
+  completed: 2,
+  discarded: 3,
+};
+
+function sortTopLevelByStatus(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => {
+    const diff = STATUS_SORT_ORDER[getEffectiveStatus(a)] - STATUS_SORT_ORDER[getEffectiveStatus(b)];
+    if (diff !== 0) return diff;
+    return a.sort_order - b.sort_order;
+  });
 }
 
 export default function TaskList({
   tasks, loading, onAddTask, onComplete, onUncomplete, onDiscard, onUndiscard,
   onDelete, onUpdateSettings, onAddChild, onSaveDescription,
-  onCreateSnapshot, onDeleteSnapshot, isHistory
+  onCreateSnapshot, onDeleteSnapshot, isHistory, sortByStatus
 }: TaskListProps) {
   const [viewMode, setViewMode] = useState<'tree' | 'leaf'>('tree');
   const [statusFilter, setStatusFilter] = useState<TaskStatus | null>(null);
@@ -42,8 +58,14 @@ export default function TaskList({
     return filterTasksByStatus(base, statusFilter);
   }, [viewMode, tasks, statusFilter]);
 
-  const normalTasks = useMemo(() => displayTasks.filter(t => !t.low_priority), [displayTasks]);
-  const lowPriorityTasks = useMemo(() => displayTasks.filter(t => t.low_priority), [displayTasks]);
+  const normalTasks = useMemo(() => {
+    const filtered = displayTasks.filter(t => !t.low_priority);
+    return sortByStatus ? sortTopLevelByStatus(filtered) : filtered;
+  }, [displayTasks, sortByStatus]);
+  const lowPriorityTasks = useMemo(() => {
+    const filtered = displayTasks.filter(t => t.low_priority);
+    return sortByStatus ? sortTopLevelByStatus(filtered) : filtered;
+  }, [displayTasks, sortByStatus]);
 
   const [showLowPriority, setShowLowPriority] = useState(false);
 
