@@ -1,8 +1,12 @@
 use std::collections::HashMap;
 
+#[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem};
+#[cfg(all(desktop, feature = "tray-icon"))]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{App, AppHandle, Manager, PhysicalPosition, WebviewWindow};
+#[cfg(desktop)]
+use tauri::{App, Manager, PhysicalPosition, WebviewWindow};
+use tauri::AppHandle;
 
 const DASHBOARD_LABEL: &str = "dashboard";
 const MAIN_LABEL: &str = "main";
@@ -55,11 +59,13 @@ async fn proxy_request(
     Ok(response_text)
 }
 
+#[cfg(desktop)]
 fn dashboard_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     app.get_webview_window(DASHBOARD_LABEL)
         .ok_or_else(|| "dashboard window was not found".to_string())
 }
 
+#[cfg(desktop)]
 fn position_dashboard(window: &WebviewWindow) -> tauri::Result<()> {
     let Some(monitor) = window.current_monitor()?.or(window.primary_monitor()?) else {
         return Ok(());
@@ -78,6 +84,7 @@ fn position_dashboard(window: &WebviewWindow) -> tauri::Result<()> {
     ))
 }
 
+#[cfg(desktop)]
 fn show_dashboard(app: &AppHandle) -> Result<(), String> {
     let window = dashboard_window(app)?;
     position_dashboard(&window).map_err(|e| e.to_string())?;
@@ -85,6 +92,7 @@ fn show_dashboard(app: &AppHandle) -> Result<(), String> {
     window.set_focus().map_err(|e| e.to_string())
 }
 
+#[cfg(desktop)]
 fn report_tray_error(action: &str, result: Result<(), String>) {
     if let Err(err) = result {
         eprintln!("failed to {action}: {err}");
@@ -92,6 +100,7 @@ fn report_tray_error(action: &str, result: Result<(), String>) {
 }
 
 #[tauri::command]
+#[cfg(desktop)]
 fn toggle_dashboard(app: AppHandle) -> Result<(), String> {
     let window = dashboard_window(&app)?;
 
@@ -105,6 +114,13 @@ fn toggle_dashboard(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[cfg(not(desktop))]
+fn toggle_dashboard(_app: AppHandle) -> Result<(), String> {
+    Err("toggle_dashboard is only available on desktop".to_string())
+}
+
+#[tauri::command]
+#[cfg(desktop)]
 fn hide_dashboard(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(DASHBOARD_LABEL) {
         window.hide().map_err(|e| e.to_string())?;
@@ -114,6 +130,13 @@ fn hide_dashboard(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[cfg(not(desktop))]
+fn hide_dashboard(_app: AppHandle) -> Result<(), String> {
+    Ok(())
+}
+
+#[tauri::command]
+#[cfg(desktop)]
 fn open_main(app: AppHandle, route: Option<String>) -> Result<(), String> {
     let window = app
         .get_webview_window(MAIN_LABEL)
@@ -135,6 +158,13 @@ fn open_main(app: AppHandle, route: Option<String>) -> Result<(), String> {
     window.set_focus().map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+#[cfg(not(desktop))]
+fn open_main(_app: AppHandle, _route: Option<String>) -> Result<(), String> {
+    Err("open_main is only available on desktop".to_string())
+}
+
+#[cfg(all(desktop, feature = "tray-icon"))]
 fn setup_tray(app: &App) -> tauri::Result<()> {
     let open_dashboard =
         MenuItem::with_id(app, "open_dashboard", "Open Dashboard", true, None::<&str>)?;
@@ -178,6 +208,11 @@ fn setup_tray(app: &App) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg(not(all(desktop, feature = "tray-icon")))]
+fn setup_tray(_app: &tauri::App) -> tauri::Result<()> {
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -191,6 +226,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            #[cfg(desktop)]
             if window.label() == DASHBOARD_LABEL || window.label() == MAIN_LABEL {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
