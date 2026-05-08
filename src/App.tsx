@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AppShell from './components/layout/AppShell';
 import LoginPage from './components/auth/LoginPage';
@@ -8,6 +8,7 @@ import TodayPage from './pages/TodayPage';
 import HistoryPage from './pages/HistoryPage';
 import CalendarPage from './pages/CalendarPage';
 import SettingsPage from './pages/SettingsPage';
+import DashboardPage from './pages/DashboardPage';
 import SyncBlocker from './components/common/SyncBlocker';
 import './index.css';
 
@@ -39,6 +40,7 @@ function AppRoutes() {
 
   return (
     <Routes>
+      <Route path="/dashboard" element={<DashboardPage />} />
       <Route element={<AppShell />}>
         <Route path="/" element={<TodayPage />} />
         <Route path="/history/:date" element={<HistoryPage />} />
@@ -52,11 +54,11 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <AuthProvider>
         <AppRoutes />
         <SyncBlocker />
       </AuthProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

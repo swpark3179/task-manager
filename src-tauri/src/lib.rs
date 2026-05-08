@@ -1,5 +1,14 @@
 use std::collections::HashMap;
 
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{App, AppHandle, Manager, PhysicalPosition, WebviewWindow};
+
+const DASHBOARD_LABEL: &str = "dashboard";
+const MAIN_LABEL: &str = "main";
+const DASHBOARD_WIDTH: f64 = 420.0;
+const DASHBOARD_HEIGHT: f64 = 640.0;
+
 // Proxy HTTP request through a configured proxy server
 #[tauri::command]
 async fn proxy_request(
@@ -46,6 +55,129 @@ async fn proxy_request(
     Ok(response_text)
 }
 
+fn dashboard_window(app: &AppHandle) -> Result<WebviewWindow, String> {
+    app.get_webview_window(DASHBOARD_LABEL)
+        .ok_or_else(|| "dashboard window was not found".to_string())
+}
+
+fn position_dashboard(window: &WebviewWindow) -> tauri::Result<()> {
+    let Some(monitor) = window.current_monitor()?.or(window.primary_monitor()?) else {
+        return Ok(());
+    };
+
+    let work_area = monitor.work_area();
+    let scale_factor = monitor.scale_factor();
+    let width = (DASHBOARD_WIDTH * scale_factor).round() as i32;
+    let height = (DASHBOARD_HEIGHT * scale_factor).round() as i32;
+    let x = work_area.position.x + work_area.size.width as i32 - width;
+    let y = work_area.position.y + work_area.size.height as i32 - height;
+
+    window.set_position(PhysicalPosition::new(
+        x.max(work_area.position.x),
+        y.max(work_area.position.y),
+    ))
+}
+
+fn show_dashboard(app: &AppHandle) -> Result<(), String> {
+    let window = dashboard_window(app)?;
+    position_dashboard(&window).map_err(|e| e.to_string())?;
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())
+}
+
+fn report_tray_error(action: &str, result: Result<(), String>) {
+    if let Err(err) = result {
+        eprintln!("failed to {action}: {err}");
+    }
+}
+
+#[tauri::command]
+fn toggle_dashboard(app: AppHandle) -> Result<(), String> {
+    let window = dashboard_window(&app)?;
+
+    if window.is_visible().map_err(|e| e.to_string())? {
+        window.hide().map_err(|e| e.to_string())
+    } else {
+        position_dashboard(&window).map_err(|e| e.to_string())?;
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn hide_dashboard(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(DASHBOARD_LABEL) {
+        window.hide().map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn open_main(app: AppHandle, route: Option<String>) -> Result<(), String> {
+    let window = app
+        .get_webview_window(MAIN_LABEL)
+        .ok_or_else(|| "main window was not found".to_string())?;
+
+    if let Some(route) = route.filter(|route| !route.trim().is_empty()) {
+        let route = if route.starts_with('/') {
+            route
+        } else {
+            format!("/{}", route)
+        };
+        window
+            .eval(&format!("window.location.hash = {:?};", route))
+            .map_err(|e| e.to_string())?;
+    }
+
+    window.show().map_err(|e| e.to_string())?;
+    window.unminimize().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())
+}
+
+fn setup_tray(app: &App) -> tauri::Result<()> {
+    let open_dashboard =
+        MenuItem::with_id(app, "open_dashboard", "Open Dashboard", true, None::<&str>)?;
+    let open_full_app =
+        MenuItem::with_id(app, "open_full_app", "Open Full App", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open_dashboard, &open_full_app, &quit])?;
+
+    let mut tray = TrayIconBuilder::with_id("main-tray")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open_dashboard" => {
+                report_tray_error("show dashboard from tray menu", show_dashboard(app));
+            }
+            "open_full_app" => {
+                report_tray_error("open full app from tray menu", open_main(app.clone(), None));
+            }
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                report_tray_error(
+                    "toggle dashboard from tray click",
+                    toggle_dashboard(tray.app_handle().clone()),
+                );
+            }
+        });
+
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+
+    tray.build(app)?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -54,7 +186,26 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![proxy_request])
+        .setup(|app| {
+            setup_tray(app)?;
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() == DASHBOARD_LABEL || window.label() == MAIN_LABEL {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    if let Err(err) = window.hide() {
+                        eprintln!("failed to hide {} on close: {err}", window.label());
+                    }
+                }
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            proxy_request,
+            toggle_dashboard,
+            hide_dashboard,
+            open_main
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
