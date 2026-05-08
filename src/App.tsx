@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AppShell from './components/layout/AppShell';
@@ -15,6 +15,20 @@ import './index.css';
 function AppRoutes() {
   const { user, loading } = useAuth();
   const [authView, setAuthView] = useState<'login' | 'signup'>('login');
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsMobile(event.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange);
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -40,7 +54,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/dashboard" element={<DashboardPage />} />
+      <Route path="/dashboard" element={isMobile ? <Navigate to="/" replace /> : <DashboardPage />} />
       <Route element={<AppShell />}>
         <Route path="/" element={<TodayPage />} />
         <Route path="/history/:date" element={<HistoryPage />} />
