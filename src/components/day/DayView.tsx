@@ -3,23 +3,14 @@ import TaskList from '../tasks/TaskList';
 import ScheduleSection from '../schedules/ScheduleSection';
 import ScheduleModal from '../schedules/ScheduleModal';
 import {
-  fetchTasksByDate,
   fetchSchedulesForDateRange,
   fetchHolidays,
-  createTask,
-  updateTask,
-  deleteTask,
-  completeTask,
-  uncompleteTask,
-  discardTask,
-  undiscardTask,
-  createTaskSnapshot,
-  deleteTaskSnapshot,
 } from '../../lib/database';
 import { useSyncStatus } from '../common/SyncIndicator';
-import { getScheduleFromMemoryCacheSync, getTasksFromMemoryCacheSync } from '../../lib/cache';
+import { getScheduleFromMemoryCacheSync } from '../../lib/cache';
 import { getHolidaysForDate } from '../../utils/koreanHolidays';
-import type { Holiday, HolidayType, Schedule, Task } from '../../types';
+import type { Holiday, HolidayType, Schedule } from '../../types';
+import { useDayTasks } from '../../hooks/useDayTasks';
 
 interface DayViewProps {
   date: string;
@@ -34,14 +25,13 @@ const HOLIDAY_TYPE_LABEL: Record<HolidayType, string> = {
 };
 
 export default function DayView({ date, isToday, onMutate }: DayViewProps) {
-  const [tasks, setTasks] = useState<Task[]>(() => getTasksFromMemoryCacheSync(date) || []);
+  const dayTasks = useDayTasks(date);
   const [schedules, setSchedules] = useState<Schedule[]>(() => {
     const mem = getScheduleFromMemoryCacheSync();
     return mem
       .filter((s) => s.start_date <= date && s.end_date >= date)
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
   });
-  const [loading, setLoading] = useState(!getTasksFromMemoryCacheSync(date));
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [userHolidays, setUserHolidays] = useState<Holiday[]>([]);
@@ -53,17 +43,6 @@ export default function DayView({ date, isToday, onMutate }: DayViewProps) {
     [date, userHolidays],
   );
 
-  const loadTasks = useCallback(async () => {
-    try {
-      const data = await fetchTasksByDate(date);
-      setTasks(data);
-    } catch (err) {
-      console.error('Failed to load tasks:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [date]);
-
   const loadSchedules = useCallback(async () => {
     try {
       const data = await fetchSchedulesForDateRange(date, date);
@@ -74,16 +53,8 @@ export default function DayView({ date, isToday, onMutate }: DayViewProps) {
   }, [date]);
 
   useEffect(() => {
-    const cached = getTasksFromMemoryCacheSync(date);
-    if (cached) {
-      setTasks(cached);
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
-    void loadTasks();
     void loadSchedules();
-  }, [date, loadTasks, loadSchedules]);
+  }, [date, loadSchedules]);
 
   useEffect(() => {
     fetchHolidays().then(setUserHolidays).catch(() => {});
@@ -93,91 +64,20 @@ export default function DayView({ date, isToday, onMutate }: DayViewProps) {
     const previousStatus = previousSyncStatusRef.current;
     previousSyncStatusRef.current = syncStatus;
     if (previousStatus === 'syncing' && syncStatus === 'synced') {
-      void loadTasks();
       void loadSchedules();
     }
-  }, [loadTasks, loadSchedules, syncStatus]);
+  }, [loadSchedules, syncStatus]);
+
+  useEffect(() => {
+    if (dayTasks.lastMutationId === 0) return;
+    void loadSchedules();
+    onMutate?.();
+  }, [dayTasks.lastMutationId, loadSchedules, onMutate]);
 
   const refresh = useCallback(async () => {
-    await Promise.all([loadTasks(), loadSchedules()]);
+    await Promise.all([dayTasks.refreshTasks(), loadSchedules()]);
     onMutate?.();
-  }, [loadTasks, loadSchedules, onMutate]);
-
-  const wrap = (fn: (id: string) => Promise<unknown>) => async (id: string) => {
-    try {
-      await fn(id);
-      await refresh();
-    } catch (err) {
-      console.error('Task action failed:', err);
-    }
-  };
-
-  const handleAddTask = async (title: string) => {
-    try {
-      await createTask({ title, created_date: date });
-      await refresh();
-    } catch (err) {
-      console.error('Failed to create task:', err);
-    }
-  };
-
-  const handleAddChild = async (parentId: string, title: string) => {
-    try {
-      await createTask({ title, parent_id: parentId, created_date: date });
-      await refresh();
-    } catch (err) {
-      console.error('Failed to add child task:', err);
-    }
-  };
-
-  const handleUpdateSettings = async (
-    id: string,
-    updates: { title?: string; category_id?: string | null; low_priority?: boolean },
-  ) => {
-    try {
-      await updateTask(id, updates);
-      await refresh();
-    } catch (err) {
-      console.error('Failed to update task settings:', err);
-    }
-  };
-
-  const handleSaveDescription = async (taskId: string, description: string) => {
-    try {
-      await updateTask(taskId, { description });
-      await refresh();
-    } catch (err) {
-      console.error('Failed to save description:', err);
-    }
-  };
-
-  const handleCreateSnapshot = async (taskId: string) => {
-    try {
-      await createTaskSnapshot(taskId, date);
-      await refresh();
-    } catch (err) {
-      console.error('Failed to create task snapshot:', err);
-    }
-  };
-
-  const handleDeleteSnapshot = async (taskId: string) => {
-    try {
-      await deleteTaskSnapshot(taskId, date);
-      await refresh();
-    } catch (err) {
-      console.error('Failed to delete task snapshot:', err);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('이 할일을 삭제하시겠습니까? 하위 할일도 모두 삭제됩니다.')) return;
-    try {
-      await deleteTask(id);
-      await refresh();
-    } catch (err) {
-      console.error('Failed to delete task:', err);
-    }
-  };
+  }, [dayTasks, loadSchedules, onMutate]);
 
   return (
     <div className="day-view">
@@ -228,19 +128,19 @@ export default function DayView({ date, isToday, onMutate }: DayViewProps) {
       <section className="today-tasks-section">
         <h2 className="today-section-title" style={{ marginBottom: '8px' }}>작업</h2>
         <TaskList
-          tasks={tasks}
-          loading={loading}
-          onAddTask={handleAddTask}
-          onComplete={wrap(completeTask)}
-          onUncomplete={wrap(uncompleteTask)}
-          onDiscard={wrap(discardTask)}
-          onUndiscard={wrap(undiscardTask)}
-          onDelete={handleDelete}
-          onUpdateSettings={handleUpdateSettings}
-          onAddChild={handleAddChild}
-          onSaveDescription={handleSaveDescription}
-          onCreateSnapshot={isToday ? handleCreateSnapshot : undefined}
-          onDeleteSnapshot={isToday ? handleDeleteSnapshot : undefined}
+          tasks={dayTasks.tasks}
+          loading={dayTasks.loading}
+          onAddTask={dayTasks.addTask}
+          onComplete={dayTasks.complete}
+          onUncomplete={dayTasks.uncomplete}
+          onDiscard={dayTasks.discard}
+          onUndiscard={dayTasks.undiscard}
+          onDelete={dayTasks.deleteTaskById}
+          onUpdateSettings={dayTasks.updateSettings}
+          onAddChild={dayTasks.addChild}
+          onSaveDescription={dayTasks.saveDescription}
+          onCreateSnapshot={isToday ? dayTasks.createSnapshot : undefined}
+          onDeleteSnapshot={isToday ? dayTasks.deleteSnapshot : undefined}
           sortByStatus={isToday}
         />
       </section>

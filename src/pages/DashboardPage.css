@@ -1,0 +1,171 @@
+.dashboard-page {
+  min-height: 100vh;
+  width: 100%;
+  overflow: auto;
+  padding: 14px;
+  background: var(--bg-primary);
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dashboard-header h1 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.dashboard-header p {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.dashboard-eyebrow {
+  color: var(--accent-primary) !important;
+  font-size: 0.7rem !important;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboard-header-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.dashboard-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.dashboard-summary span {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  padding: 2px 8px;
+}
+
+.dashboard-quick-add,
+.dashboard-child-form {
+  display: flex;
+  gap: 6px;
+}
+
+.dashboard-quick-add {
+  margin-bottom: 12px;
+}
+
+.dashboard-quick-add input,
+.dashboard-child-form input,
+.dashboard-title-input,
+.dashboard-task-detail textarea {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  padding: 7px 9px;
+}
+
+.dashboard-task-list ul,
+.dashboard-task-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dashboard-task {
+  margin-left: calc(var(--depth, 0) * 14px);
+  margin-bottom: 8px;
+}
+
+.dashboard-task-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  padding: 7px;
+  box-shadow: var(--shadow-xs);
+}
+
+.dashboard-task.is-completed .dashboard-title-input,
+.dashboard-task.is-discarded .dashboard-title-input {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.dashboard-check,
+.dashboard-icon-button {
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.dashboard-check {
+  width: 26px;
+  height: 26px;
+  font-weight: 700;
+}
+
+.dashboard-check.checked {
+  background: var(--status-completed);
+  color: var(--text-inverse);
+}
+
+.dashboard-check:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.dashboard-icon-button {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 6px;
+}
+
+.dashboard-title-input {
+  border: 0;
+  background: transparent;
+  padding: 2px;
+}
+
+.dashboard-task-detail {
+  display: grid;
+  gap: 7px;
+  margin-top: 6px;
+  padding: 0 0 0 34px;
+}
+
+.dashboard-task-detail textarea {
+  resize: vertical;
+}
+
+.dashboard-task-children {
+  margin-top: 2px;
+}
+
+.dashboard-empty {
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  padding: 22px;
+  text-align: center;
+}

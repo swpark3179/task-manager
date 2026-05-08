@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { clearAllCaches } from '../lib/cache';
 import { syncIfNeeded, startAutoSync, stopAutoSync, performFullSync } from '../lib/syncManager';
 import { rescheduleAll } from '../lib/notifications';
+import { isPrimaryRuntimeWindow } from '../lib/runtimeWindow';
 
 // =============================================
 // Authentication Context
@@ -24,6 +25,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [globalSideEffectsEnabled, setGlobalSideEffectsEnabled] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void isPrimaryRuntimeWindow().then((enabled) => {
+      if (mounted) setGlobalSideEffectsEnabled(enabled);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     // Get initial session
@@ -32,8 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       setLoading(false);
 
-      // 세션이 있으면 조건부 동기화 + 자동 동기화 타이머 시작 (비동기)
-      if (session?.user) {
+      // 세션이 있으면 기본 창에서만 조건부 동기화 + 자동 동기화 타이머 시작 (비동기)
+      if (session?.user && globalSideEffectsEnabled) {
         void syncIfNeeded().catch(console.error);
         startAutoSync();
         // 동기화가 스킵되어도 알림 예약은 갱신 (권한 없으면 조용히 종료)
@@ -51,13 +64,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [globalSideEffectsEnabled]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (!error) {
-      // 로그인 성공: 비동기 전체 동기화 (UI는 SyncBlocker가 입력 차단)
-      // performFullSync 내부에서 rescheduleAll이 호출됨
+    if (!error && globalSideEffectsEnabled) {
+      // Run expensive global sync work only from the primary app window.
+      // The tray dashboard shares auth state but must not start duplicate sync loops.
       void performFullSync().catch(console.error);
       startAutoSync();
     }
