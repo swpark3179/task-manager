@@ -631,9 +631,26 @@ export async function rolloverTasks(fromDate: string, toDate: string): Promise<n
  * 동일하게 사용되어 어느 경로로든 일관된 롤오버가 일어나도록 합니다.
  */
 export async function rolloverFromLastActive(today: string = getTodayString()): Promise<void> {
-  const { Store } = await import('@tauri-apps/plugin-store');
-  const store = await Store.load('settings.json');
-  const lastDate = await store.get<string>('lastActiveDate');
+  const key = 'lastActiveDate';
+  let lastDate: string | null = null;
+  let persistLastActiveDate: ((value: string) => Promise<void>) | null = null;
+
+  try {
+    const { Store } = await import('@tauri-apps/plugin-store');
+    const store = await Store.load('settings.json');
+    lastDate = (await store.get<string>(key)) ?? null;
+    persistLastActiveDate = async (value: string) => {
+      await store.set(key, value);
+      await store.save();
+    };
+  } catch {
+    if (typeof window !== 'undefined') {
+      lastDate = window.localStorage.getItem(key);
+      persistLastActiveDate = async (value: string) => {
+        window.localStorage.setItem(key, value);
+      };
+    }
+  }
 
   const sevenDaysAgo = getDaysAgo(today, 7);
   let startDate = sevenDaysAgo;
@@ -643,8 +660,9 @@ export async function rolloverFromLastActive(today: string = getTodayString()): 
     await rolloverTasks(startDate, today);
   }
 
-  await store.set('lastActiveDate', today);
-  await store.save();
+  if (persistLastActiveDate) {
+    await persistLastActiveDate(today);
+  }
 }
 
 // =============================================
