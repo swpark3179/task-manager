@@ -12,6 +12,8 @@ const DASHBOARD_LABEL: &str = "dashboard";
 const MAIN_LABEL: &str = "main";
 const DASHBOARD_WIDTH: f64 = 420.0;
 const DASHBOARD_HEIGHT: f64 = 640.0;
+const DASHBOARD_MARGIN_RIGHT: f64 = 12.0;
+const DASHBOARD_MARGIN_BOTTOM: f64 = 48.0;
 
 // Proxy HTTP request through a configured proxy server
 #[tauri::command]
@@ -75,8 +77,10 @@ fn position_dashboard(window: &WebviewWindow) -> tauri::Result<()> {
     let scale_factor = monitor.scale_factor();
     let width = (DASHBOARD_WIDTH * scale_factor).round() as i32;
     let height = (DASHBOARD_HEIGHT * scale_factor).round() as i32;
-    let x = work_area.position.x + work_area.size.width as i32 - width;
-    let y = work_area.position.y + work_area.size.height as i32 - height;
+    let margin_right = (DASHBOARD_MARGIN_RIGHT * scale_factor).round() as i32;
+    let margin_bottom = (DASHBOARD_MARGIN_BOTTOM * scale_factor).round() as i32;
+    let x = work_area.position.x + work_area.size.width as i32 - width - margin_right;
+    let y = work_area.position.y + work_area.size.height as i32 - height - margin_bottom;
 
     window.set_position(PhysicalPosition::new(
         x.max(work_area.position.x),

@@ -24,6 +24,7 @@ function TaskEditor({
   onDelete: (id: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? '');
   const [childTitle, setChildTitle] = useState('');
@@ -38,9 +39,19 @@ function TaskEditor({
   }, [task.description, task.title]);
 
   const saveTitle = async () => {
+    setIsEditingTitle(false);
     const trimmed = title.trim();
-    if (!trimmed || trimmed === task.title) return;
+    if (!trimmed) {
+      setTitle(task.title);
+      return;
+    }
+    if (trimmed === task.title) return;
     await onSaveTitle(task, trimmed);
+  };
+
+  const cancelTitleEdit = () => {
+    setTitle(task.title);
+    setIsEditingTitle(false);
   };
 
   const saveDescription = async () => {
@@ -70,16 +81,28 @@ function TaskEditor({
         >
           {isCompleted ? '✓' : ''}
         </button>
-        <input
-          className="dashboard-title-input"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          onBlur={() => void saveTitle()}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') event.currentTarget.blur();
-          }}
-          aria-label="작업 제목"
-        />
+        {isEditingTitle ? (
+          <input
+            className="dashboard-title-input"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            onBlur={() => void saveTitle()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur();
+              else if (event.key === 'Escape') cancelTitleEdit();
+            }}
+            autoFocus
+            aria-label="작업 제목"
+          />
+        ) : (
+          <span
+            className={`dashboard-task-title ${task.title ? '' : 'is-empty'}`}
+            onDoubleClick={() => setIsEditingTitle(true)}
+            title="더블클릭하여 편집"
+          >
+            {task.title || '제목 없음'}
+          </span>
+        )}
         <button
           type="button"
           className="dashboard-icon-button"
@@ -179,10 +202,10 @@ export default function DashboardPage() {
       </header>
 
       <section className="dashboard-summary" aria-label="오늘 작업 요약">
-        <span>전체 {summary.total}</span>
-        <span>완료 {summary.completed}</span>
-        <span>진행 {summary.inProgress}</span>
-        <span>대기 {summary.pending}</span>
+        <span><strong>{summary.total}</strong>전체</span>
+        <span><strong>{summary.completed}</strong>완료</span>
+        <span><strong>{summary.inProgress}</strong>진행</span>
+        <span><strong>{summary.pending}</strong>대기</span>
       </section>
 
       <form className="dashboard-quick-add" onSubmit={addTask}>
