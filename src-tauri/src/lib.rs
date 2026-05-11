@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem};
-#[cfg(all(desktop, feature = "tray-icon"))]
+#[cfg(target_os = "windows")]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 #[cfg(desktop)]
 use tauri::{App, Manager, PhysicalPosition, WebviewWindow};
@@ -164,7 +164,7 @@ fn open_main(_app: AppHandle, _route: Option<String>) -> Result<(), String> {
     Err("open_main is only available on desktop".to_string())
 }
 
-#[cfg(all(desktop, feature = "tray-icon"))]
+#[cfg(target_os = "windows")]
 fn setup_tray(app: &App) -> tauri::Result<()> {
     let open_dashboard =
         MenuItem::with_id(app, "open_dashboard", "Open Dashboard", true, None::<&str>)?;
@@ -208,7 +208,7 @@ fn setup_tray(app: &App) -> tauri::Result<()> {
     Ok(())
 }
 
-#[cfg(not(all(desktop, feature = "tray-icon")))]
+#[cfg(not(target_os = "windows"))]
 fn setup_tray(_app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
