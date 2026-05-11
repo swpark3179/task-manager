@@ -10,26 +10,16 @@ import CalendarPage from './pages/CalendarPage';
 import SettingsPage from './pages/SettingsPage';
 import DashboardPage from './pages/DashboardPage';
 import SyncBlocker from './components/common/SyncBlocker';
-import { isDashboardHashRoute } from './lib/runtimeWindow';
+import { isMobilePlatform } from './lib/runtimeWindow';
 import './index.css';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
   const [authView, setAuthView] = useState<'login' | 'signup'>('login');
-  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches);
-  const isDashboardWindow = isDashboardHashRoute();
+  const [isMobile, setIsMobile] = useState(() => isMobilePlatform());
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 768px)');
-    const handleChange = (event: MediaQueryListEvent) => {
-      setIsMobile(event.matches);
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-
-    return () => {
-      mediaQuery.removeEventListener('change', handleChange);
-    };
+    setIsMobile(isMobilePlatform());
   }, []);
 
   if (loading) {
@@ -56,7 +46,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/dashboard" element={isMobile && !isDashboardWindow ? <Navigate to="/" replace /> : <DashboardPage />} />
+      <Route path="/dashboard" element={isMobile ? <Navigate to="/" replace /> : <DashboardPage />} />
       <Route element={<AppShell />}>
         <Route path="/" element={<TodayPage />} />
         <Route path="/history/:date" element={<HistoryPage />} />

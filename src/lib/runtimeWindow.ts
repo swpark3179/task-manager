@@ -79,3 +79,9 @@ export async function getPrimaryTauriWindow() {
 export function isDashboardHashRoute(): boolean {
   return getHashFallbackLabel() === 'dashboard';
 }
+
+export function isMobilePlatform(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /Android|iPhone|iPad|iPod/i.test(ua);
+}
