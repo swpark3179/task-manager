@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { useDayTasks } from '../hooks/useDayTasks';
 import { hideDashboard, openFullApp } from '../lib/windowCommands';
 import { getTodayString, formatDateDisplay } from '../utils/dateUtils';
@@ -6,22 +6,59 @@ import { calculateStatusSummary, getEffectiveStatus, hasChildren } from '../util
 import type { Task } from '../types';
 import './DashboardPage.css';
 
+const FAVORITES_STORAGE_KEY = 'task-manager.dashboard.favorites';
+
+function loadFavorites(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((value): value is string => typeof value === 'string'));
+  } catch {
+    return new Set();
+  }
+}
+
+function persistFavorites(favorites: Set<string>) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(
+      FAVORITES_STORAGE_KEY,
+      JSON.stringify(Array.from(favorites)),
+    );
+  } catch {
+    // ignore storage errors (quota, privacy mode)
+  }
+}
+
 function TaskEditor({
   task,
   depth = 0,
+  isFavorite,
+  canSnapshot,
   onToggleComplete,
   onSaveTitle,
   onSaveDescription,
   onAddChild,
   onDelete,
+  onToggleFavorite,
+  onCreateSnapshot,
+  onDeleteSnapshot,
 }: {
   task: Task;
   depth?: number;
+  isFavorite: boolean;
+  canSnapshot: boolean;
   onToggleComplete: (task: Task) => Promise<void>;
   onSaveTitle: (task: Task, title: string) => Promise<void>;
   onSaveDescription: (task: Task, description: string) => Promise<void>;
   onAddChild: (parentId: string, title: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onToggleFavorite: (id: string) => void;
+  onCreateSnapshot: (id: string) => Promise<void>;
+  onDeleteSnapshot: (id: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -32,6 +69,8 @@ function TaskEditor({
   const isCompleted = effectiveStatus === 'completed';
   const isDiscarded = effectiveStatus === 'discarded';
   const childCount = task.children?.length ?? 0;
+  const showSnapshotButton = canSnapshot && depth === 0 && !task.is_snapshot && !isCompleted && !isDiscarded;
+  const showFavoriteButton = depth === 0 && !task.is_snapshot;
 
   useEffect(() => {
     setTitle(task.title);
@@ -68,8 +107,19 @@ function TaskEditor({
     setExpanded(true);
   };
 
+  const handleToggleSnapshot = async () => {
+    if (task.has_snapshot) {
+      await onDeleteSnapshot(task.id);
+    } else {
+      await onCreateSnapshot(task.id);
+    }
+  };
+
   return (
-    <li className={`dashboard-task ${isCompleted ? 'is-completed' : ''} ${isDiscarded ? 'is-discarded' : ''}`} style={{ '--depth': depth } as CSSProperties}>
+    <li
+      className={`dashboard-task ${isCompleted ? 'is-completed' : ''} ${isDiscarded ? 'is-discarded' : ''} ${isFavorite ? 'is-favorite' : ''}`}
+      style={{ '--depth': depth } as CSSProperties}
+    >
       <div className="dashboard-task-row">
         <button
           type="button"
@@ -102,6 +152,32 @@ function TaskEditor({
           >
             {task.title || '제목 없음'}
           </span>
+        )}
+        {showFavoriteButton && (
+          <button
+            type="button"
+            className={`dashboard-icon-button dashboard-favorite-button ${isFavorite ? 'is-active' : ''}`}
+            onClick={() => onToggleFavorite(task.id)}
+            aria-label={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
+            aria-pressed={isFavorite}
+            title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+          >
+            {isFavorite ? '★' : '☆'}
+          </button>
+        )}
+        {showSnapshotButton && (
+          <button
+            type="button"
+            className={`dashboard-icon-button dashboard-snapshot-button ${task.has_snapshot ? 'is-active' : ''}`}
+            onClick={() => void handleToggleSnapshot()}
+            aria-label={task.has_snapshot ? '오늘 진행 기록 취소' : '오늘 진행 기록'}
+            aria-pressed={!!task.has_snapshot}
+            title={task.has_snapshot ? '오늘의 진행 기록을 취소합니다' : '오늘 진행 중임을 기록으로 남깁니다'}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={task.has_snapshot ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
         )}
         <button
           type="button"
@@ -145,11 +221,16 @@ function TaskEditor({
                   key={child.id}
                   task={child}
                   depth={depth + 1}
+                  isFavorite={false}
+                  canSnapshot={canSnapshot}
                   onToggleComplete={onToggleComplete}
                   onSaveTitle={onSaveTitle}
                   onSaveDescription={onSaveDescription}
                   onAddChild={onAddChild}
                   onDelete={onDelete}
+                  onToggleFavorite={onToggleFavorite}
+                  onCreateSnapshot={onCreateSnapshot}
+                  onDeleteSnapshot={onDeleteSnapshot}
                 />
               ))}
             </ul>
@@ -164,7 +245,32 @@ export default function DashboardPage() {
   const today = getTodayString();
   const dayTasks = useDayTasks(today);
   const [newTitle, setNewTitle] = useState('');
+  const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
   const summary = useMemo(() => calculateStatusSummary(dayTasks.tasks), [dayTasks.tasks]);
+
+  useEffect(() => {
+    persistFavorites(favorites);
+  }, [favorites]);
+
+  const toggleFavorite = useCallback((id: string) => {
+    setFavorites((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const sortedTasks = useMemo(() => {
+    if (favorites.size === 0) return dayTasks.tasks;
+    const favored: Task[] = [];
+    const rest: Task[] = [];
+    for (const task of dayTasks.tasks) {
+      if (favorites.has(task.id)) favored.push(task);
+      else rest.push(task);
+    }
+    return [...favored, ...rest];
+  }, [dayTasks.tasks, favorites]);
 
   const addTask = async (event: FormEvent) => {
     event.preventDefault();
@@ -225,17 +331,22 @@ export default function DashboardPage() {
         {!dayTasks.loading && dayTasks.tasks.length === 0 && (
           <div className="dashboard-empty">오늘 작업이 없습니다.</div>
         )}
-        {dayTasks.tasks.length > 0 && (
+        {sortedTasks.length > 0 && (
           <ul>
-            {dayTasks.tasks.map((task) => (
+            {sortedTasks.map((task) => (
               <TaskEditor
                 key={task.id}
                 task={task}
+                isFavorite={favorites.has(task.id)}
+                canSnapshot={task.created_date === today}
                 onToggleComplete={toggleComplete}
                 onSaveTitle={(item, title) => dayTasks.updateSettings(item.id, { title })}
                 onSaveDescription={(item, value) => dayTasks.saveDescription(item.id, value)}
                 onAddChild={dayTasks.addChild}
                 onDelete={(id) => dayTasks.deleteTaskById(id, { confirm: false })}
+                onToggleFavorite={toggleFavorite}
+                onCreateSnapshot={dayTasks.createSnapshot}
+                onDeleteSnapshot={dayTasks.deleteSnapshot}
               />
             ))}
           </ul>
@@ -244,4 +355,3 @@ export default function DashboardPage() {
     </main>
   );
 }
-

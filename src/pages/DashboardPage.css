@@ -1,10 +1,18 @@
 .dashboard-page {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
   width: 100%;
-  overflow: auto;
-  padding: 18px 18px 24px;
+  overflow: hidden;
+  padding: 18px 18px 18px;
   background: var(--bg-primary);
   font-feature-settings: 'tnum';
+}
+
+.dashboard-page > .dashboard-header,
+.dashboard-page > .dashboard-summary,
+.dashboard-page > .dashboard-quick-add {
+  flex: 0 0 auto;
 }
 
 .dashboard-header {
@@ -109,6 +117,18 @@
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(79, 124, 255, 0.18);
+}
+
+.dashboard-task-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* allow last item's box-shadow / focus ring to breathe */
+  padding-right: 2px;
+  margin-right: -2px;
+  /* compensate page bottom padding so the last task isn't flush */
+  padding-bottom: 8px;
 }
 
 .dashboard-task-list ul,
@@ -227,6 +247,60 @@
   height: 26px;
   padding: 0 8px;
   font-size: 0.78rem;
+}
+
+.dashboard-favorite-button,
+.dashboard-snapshot-button {
+  min-width: 26px;
+  width: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dashboard-favorite-button {
+  font-size: 0.98rem;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.dashboard-favorite-button:hover {
+  color: #d9a300;
+}
+
+.dashboard-favorite-button.is-active {
+  color: #f5b400;
+  border-color: rgba(245, 180, 0, 0.35);
+  background: rgba(245, 180, 0, 0.12);
+}
+
+.dashboard-favorite-button.is-active:hover {
+  color: #f5b400;
+  background: rgba(245, 180, 0, 0.18);
+}
+
+.dashboard-snapshot-button {
+  color: var(--text-muted);
+}
+
+.dashboard-snapshot-button:hover {
+  color: var(--accent-primary);
+}
+
+.dashboard-snapshot-button.is-active {
+  color: var(--accent-primary);
+  border-color: rgba(79, 124, 255, 0.35);
+  background: rgba(79, 124, 255, 0.12);
+}
+
+.dashboard-snapshot-button.is-active:hover {
+  background: rgba(79, 124, 255, 0.18);
+}
+
+.dashboard-task.is-favorite > .dashboard-task-row {
+  border-color: rgba(245, 180, 0, 0.45);
+  box-shadow: 0 0 0 1px rgba(245, 180, 0, 0.2), var(--shadow-xs);
 }
 
 .dashboard-task-detail {
