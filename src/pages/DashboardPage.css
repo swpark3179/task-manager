@@ -3,6 +3,7 @@
    ============================================================ */
 
 .dashboard-page {
+  position: relative;
   --bg: #ffffff;
   --bg-2: #f7f8fa;
   --bg-3: #eef0f4;
@@ -30,6 +31,18 @@
   padding: 14px;
   background: transparent;
   font-feature-settings: 'tnum';
+}
+
+.dashboard-page .resize-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  cursor: ns-resize;
+  z-index: 50;
+  background: transparent;
+  -webkit-app-region: no-drag;
 }
 
 /* Make the document layers transparent so only the white widget is visible */
