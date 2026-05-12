@@ -31,12 +31,15 @@
         "skipTaskbar": true,
         "alwaysOnTop": true,
         "resizable": false,
-        "decorations": true
+        "decorations": false,
+        "transparent": true,
+        "shadow": false
       }
     ],
     "security": {
       "csp": null
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,
