@@ -3,7 +3,12 @@ import { useDayTasks } from '../hooks/useDayTasks';
 import { hideDashboard, openFullApp } from '../lib/windowCommands';
 import { getTodayString } from '../utils/dateUtils';
 import { calculateStatusSummary, getEffectiveStatus, hasChildren } from '../utils/taskUtils';
-import type { Task, TaskStatus } from '../types';
+import {
+  createSchedule,
+  deleteSchedule,
+  fetchSchedulesForDateRange,
+} from '../lib/database';
+import type { Schedule, Task, TaskStatus } from '../types';
 import MarkdownViewer from '../components/markdown/MarkdownViewer';
 import './DashboardPage.css';
 
@@ -16,6 +21,35 @@ const KOR_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 function formatTodayHeader(iso: string): string {
   const d = new Date(iso + 'T00:00:00');
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${KOR_DAYS[d.getDay()]})`;
+}
+
+function addDaysIso(iso: string, n: number): string {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function isSameDayIso(a: string, b: string): boolean {
+  return a.slice(0, 10) === b.slice(0, 10);
+}
+
+function formatDayLabel(iso: string, today: string): string {
+  const d = new Date(iso + 'T00:00:00');
+  const tomorrow = addDaysIso(today, 1);
+  if (iso === today) return '오늘';
+  if (iso === tomorrow) return '내일';
+  return `${d.getMonth() + 1}/${d.getDate()} (${KOR_DAYS[d.getDay()]})`;
+}
+
+function formatScheduleTime(time: string | null): string {
+  if (!time) return '종일';
+  const [hStr, mStr] = time.split(':');
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (Number.isNaN(h)) return time;
+  const ap = h >= 12 ? '오후' : '오전';
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return `${ap} ${hh}:${String(Number.isNaN(m) ? 0 : m).padStart(2, '0')}`;
 }
 
 function loadFavorites(): Set<string> {
@@ -438,12 +472,242 @@ function TaskNode({
   );
 }
 
+function ScheduleCard({
+  sched,
+  today,
+  onDelete,
+}: {
+  sched: Schedule;
+  today: string;
+  onDelete: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const sameDayEnd = isSameDayIso(sched.start_date, sched.end_date);
+  const timeMain = formatScheduleTime(sched.scheduled_time);
+  const timeSub = sameDayEnd
+    ? sched.scheduled_time
+      ? ''
+      : ''
+    : `~ ${formatDayLabel(sched.end_date, today)}`;
+  return (
+    <div className="sch-card">
+      <button type="button" className="sch-card-top" onClick={() => setOpen((v) => !v)}>
+        <div className="sch-card-time">
+          <div className="sch-card-t1">{timeMain}</div>
+          {timeSub && <div className="sch-card-t2">{timeSub}</div>}
+        </div>
+        <div className="sch-card-body">
+          <div className="sch-card-title">{sched.title}</div>
+          {!open && sched.description && (
+            <div className="sch-card-prev">{sched.description.split('\n')[0]}</div>
+          )}
+        </div>
+        <span className={`caret ${open ? 'caret-on' : ''}`}>
+          <ChevronIcon />
+        </span>
+      </button>
+      {open && (
+        <div className="sch-card-open">
+          {sched.description && <div className="sch-card-detail">{sched.description}</div>}
+          <div className="sch-card-act">
+            <button
+              type="button"
+              className="btn-ghost btn-sm btn-danger"
+              onClick={() => {
+                if (confirm(`"${sched.title}" 삭제할까요?`)) onDelete(sched.id);
+              }}
+            >
+              삭제
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SchedulesPane({ today }: { today: string }) {
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({
+    title: '',
+    start_date: today,
+    end_date: today,
+    scheduled_time: '09:00',
+    description: '',
+  });
+
+  const rangeEnd = useMemo(() => addDaysIso(today, 14), [today]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchSchedulesForDateRange(today, rangeEnd);
+      setSchedules(data);
+    } catch (err) {
+      console.error('Failed to load schedules:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [today, rangeEnd]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const grouped = useMemo(() => {
+    const g: Record<string, Schedule[]> = {};
+    [...schedules]
+      .sort((a, b) => {
+        const da = a.start_date.localeCompare(b.start_date);
+        if (da !== 0) return da;
+        return (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? '');
+      })
+      .forEach((s) => {
+        const day = s.start_date;
+        (g[day] = g[day] || []).push(s);
+      });
+    return g;
+  }, [schedules]);
+
+  const submit = async () => {
+    if (!draft.title.trim()) return;
+    try {
+      await createSchedule({
+        title: draft.title.trim(),
+        start_date: draft.start_date,
+        end_date: draft.end_date || draft.start_date,
+        scheduled_time: draft.scheduled_time || null,
+        description: draft.description || null,
+      });
+      setDraft({
+        title: '',
+        start_date: today,
+        end_date: today,
+        scheduled_time: '09:00',
+        description: '',
+      });
+      setAdding(false);
+      await load();
+    } catch (err) {
+      console.error('Failed to add schedule:', err);
+    }
+  };
+
+  const remove = async (id: string) => {
+    try {
+      await deleteSchedule(id);
+      await load();
+    } catch (err) {
+      console.error('Failed to delete schedule:', err);
+    }
+  };
+
+  return (
+    <div className="pane">
+      <div className="sch-head">
+        <div className="sch-head-l">예정된 일정</div>
+        <button
+          type="button"
+          className="btn-primary btn-sm"
+          onClick={() => setAdding((v) => !v)}
+        >
+          {adding ? '취소' : '+ 일정 추가'}
+        </button>
+      </div>
+
+      {adding && (
+        <div className="sch-form">
+          <input
+            className="sch-in"
+            placeholder="일정 제목"
+            value={draft.title}
+            onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+            autoFocus
+          />
+          <div className="sch-row">
+            <label className="sch-lbl">날짜</label>
+            <input
+              type="date"
+              className="sch-in sch-in-dt"
+              value={draft.start_date}
+              onChange={(e) => setDraft({ ...draft, start_date: e.target.value, end_date: e.target.value })}
+            />
+          </div>
+          <div className="sch-row">
+            <label className="sch-lbl">시각</label>
+            <input
+              type="time"
+              className="sch-in sch-in-dt"
+              value={draft.scheduled_time}
+              onChange={(e) => setDraft({ ...draft, scheduled_time: e.target.value })}
+            />
+          </div>
+          <textarea
+            className="sch-in sch-ta"
+            placeholder="세부 내용"
+            value={draft.description}
+            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+          />
+          <div className="sch-act">
+            <button type="button" className="btn-primary" onClick={() => void submit()}>
+              저장
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="sch-list">
+        {loading && schedules.length === 0 && (
+          <div className="empty">
+            <div className="empty-t">불러오는 중…</div>
+          </div>
+        )}
+        {!loading && schedules.length === 0 && (
+          <div className="empty">
+            <div className="empty-t">일정이 없어요</div>
+            <div className="empty-s">'+ 일정 추가'로 등록해보세요</div>
+          </div>
+        )}
+        {Object.entries(grouped).map(([day, items]) => (
+          <div key={day} className="sch-group">
+            <div className="sch-day">
+              <span className="sch-day-l">{formatDayLabel(day, today)}</span>
+              <span className="sch-day-d">{day}</span>
+              <span className="sch-day-n">{items.length}건</span>
+            </div>
+            {items.map((s) => (
+              <ScheduleCard key={s.id} sched={s} today={today} onDelete={(id) => void remove(id)} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const today = getTodayString();
   const dayTasks = useDayTasks(today);
   const [newTitle, setNewTitle] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [tab, setTab] = useState<'tasks' | 'schedules'>('tasks');
+  const [scheduleCount, setScheduleCount] = useState<number | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
+
+  useEffect(() => {
+    let cancelled = false;
+    const rangeEnd = addDaysIso(today, 14);
+    fetchSchedulesForDateRange(today, rangeEnd)
+      .then((data) => {
+        if (!cancelled) setScheduleCount(data.length);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [today]);
   const summary = useMemo(() => calculateStatusSummary(dayTasks.tasks), [dayTasks.tasks]);
   const progressPct = summary.total ? Math.round((summary.completed / summary.total) * 100) : 0;
 
@@ -553,6 +817,26 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <div className="tabbar">
+          <button
+            type="button"
+            className={`tab ${tab === 'tasks' ? 'tab-on' : ''}`}
+            onClick={() => setTab('tasks')}
+          >
+            작업 <span className="tab-cnt">{summary.total}</span>
+          </button>
+          <button
+            type="button"
+            className={`tab ${tab === 'schedules' ? 'tab-on' : ''}`}
+            onClick={() => setTab('schedules')}
+          >
+            일정 {scheduleCount !== null && <span className="tab-cnt">{scheduleCount}</span>}
+          </button>
+        </div>
+
+        {tab === 'schedules' ? (
+          <SchedulesPane today={today} />
+        ) : (
         <div className="pane">
           <form className="quick" onSubmit={addTask}>
             <input
@@ -614,6 +898,7 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+        )}
       </div>
     </main>
   );
