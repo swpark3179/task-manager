@@ -763,8 +763,8 @@ export default function DashboardPage() {
     <main className="dashboard-page">
       <div className="widget">
         <div className="hdr">
-          <div className="hdr-top">
-            <div className="hdr-date">
+          <div className="hdr-top" data-tauri-drag-region>
+            <div className="hdr-date" data-tauri-drag-region>
               <div className="hdr-date-main">{formatTodayHeader(today)}</div>
               <div className="hdr-date-sub">
                 오늘 진행 {summary.inProgress}건 · 대기 {summary.pending}건
