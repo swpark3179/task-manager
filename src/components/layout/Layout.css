@@ -6,6 +6,7 @@
 .app-shell {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
 }
@@ -240,7 +241,7 @@
 @media (max-width: 767px) {
   .main-body {
     padding: var(--space-md);
-    padding-bottom: calc(var(--mobile-nav-height) + var(--space-md));
+    padding-bottom: calc(var(--mobile-nav-height) + var(--space-md) + env(safe-area-inset-bottom, 0px));
   }
 
   .main-header {
