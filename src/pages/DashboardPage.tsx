@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { useDayTasks } from '../hooks/useDayTasks';
 import { hideDashboard, openFullApp } from '../lib/windowCommands';
+import { getCurrentTauriWindow } from '../lib/runtimeWindow';
 import { getTodayString } from '../utils/dateUtils';
 import { calculateStatusSummary, getEffectiveStatus, hasChildren } from '../utils/taskUtils';
 import {
@@ -759,8 +760,25 @@ export default function DashboardPage() {
     { k: 'completed', l: '완료', n: summary.completed },
   ];
 
+  const startTopResize = useCallback(async (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const w = await getCurrentTauriWindow();
+    if (!w) return;
+    try {
+      await w.startResizeDragging('North');
+    } catch (err) {
+      console.warn('Failed to start resize dragging:', err);
+    }
+  }, []);
+
   return (
     <main className="dashboard-page">
+      <div
+        className="resize-top"
+        onMouseDown={(e) => void startTopResize(e)}
+        aria-hidden="true"
+      />
       <div className="widget">
         <div className="hdr">
           <div className="hdr-top" data-tauri-drag-region>

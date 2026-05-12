@@ -76,7 +76,12 @@ fn position_dashboard(window: &WebviewWindow) -> tauri::Result<()> {
     let work_area = monitor.work_area();
     let scale_factor = monitor.scale_factor();
     let width = (DASHBOARD_WIDTH * scale_factor).round() as i32;
-    let height = (DASHBOARD_HEIGHT * scale_factor).round() as i32;
+    let current_size = window.outer_size()?;
+    let height = if current_size.height > 0 {
+        current_size.height as i32
+    } else {
+        (DASHBOARD_HEIGHT * scale_factor).round() as i32
+    };
     let margin_right = (DASHBOARD_MARGIN_RIGHT * scale_factor).round() as i32;
     let margin_bottom = (DASHBOARD_MARGIN_BOTTOM * scale_factor).round() as i32;
     let x = work_area.position.x + work_area.size.width as i32 - width - margin_right;
