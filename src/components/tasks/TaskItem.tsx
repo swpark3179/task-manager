@@ -60,8 +60,11 @@ export default function TaskItem({
   // 해당 작업의 현재 위치(원본)로 이동할 수 있는 링크 버튼을 대신 노출합니다.
   const handleNavigateToOriginal = () => {
     const today = getTodayString();
-    const dest = task.created_date === today ? '/' : `/history/${task.created_date}`;
-    navigate(dest);
+    if (task.created_date === today) {
+      navigate('/');
+    } else {
+      navigate('/', { state: { date: task.created_date } });
+    }
   };
 
   return (

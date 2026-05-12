@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import TodayHero from '../components/day/TodayHero';
 import TodayTabs from '../components/day/TodayTabs';
 import { rolloverFromLastActive } from '../lib/database';
@@ -9,8 +10,17 @@ import '../components/day/today.css';
 
 export default function TodayPage() {
   const today = getTodayString();
-  const [selectedDate, setSelectedDate] = useState<string>(today);
+  const location = useLocation();
+  const navState = location.state as { date?: string } | null;
+  const [selectedDate, setSelectedDate] = useState<string>(navState?.date || today);
   const [liveSummary, setLiveSummary] = useState<TaskStatusSummary | undefined>(undefined);
+
+  useEffect(() => {
+    if (navState?.date) {
+      setSelectedDate(navState.date);
+      setLiveSummary(undefined);
+    }
+  }, [navState?.date]);
 
   useEffect(() => {
     void (async () => {
