@@ -45,6 +45,15 @@
   -webkit-app-region: no-drag;
 }
 
+@keyframes dashboard-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.dashboard-page .spin {
+  animation: dashboard-spin 0.9s linear infinite;
+  transform-origin: 50% 50%;
+}
+
 /* Make the document layers transparent so only the white widget is visible */
 html:has(.dashboard-page),
 body:has(.dashboard-page),

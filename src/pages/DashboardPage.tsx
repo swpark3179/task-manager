@@ -8,6 +8,7 @@ import {
   createSchedule,
   deleteSchedule,
   fetchSchedulesForDateRange,
+  forceSync,
 } from '../lib/database';
 import type { Schedule, Task, TaskStatus } from '../types';
 import MarkdownViewer from '../components/markdown/MarkdownViewer';
@@ -135,6 +136,26 @@ function ExternalIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M14 4h6v6M20 4l-9 9M10 6H5v13h13v-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function SyncIcon({ spinning }: { spinning?: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      className={spinning ? 'spin' : undefined}
+    >
+      <path
+        d="M21 12a9 9 0 0 1-15.5 6.3M3 12a9 9 0 0 1 15.5-6.3M21 4v5h-5M3 20v-5h5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -527,7 +548,7 @@ function ScheduleCard({
   );
 }
 
-function SchedulesPane({ today }: { today: string }) {
+function SchedulesPane({ today, reloadKey = 0 }: { today: string; reloadKey?: number }) {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -555,7 +576,7 @@ function SchedulesPane({ today }: { today: string }) {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, reloadKey]);
 
   const grouped = useMemo(() => {
     const g: Record<string, Schedule[]> = {};
@@ -696,6 +717,8 @@ export default function DashboardPage() {
   const [tab, setTab] = useState<'tasks' | 'schedules'>('tasks');
   const [scheduleCount, setScheduleCount] = useState<number | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
+  const [syncing, setSyncing] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -766,11 +789,73 @@ export default function DashboardPage() {
     const w = await getCurrentTauriWindow();
     if (!w) return;
     try {
-      await w.startResizeDragging('North');
+      const dpiMod = await import('@tauri-apps/api/dpi');
+      const { PhysicalPosition, PhysicalSize } = dpiMod;
+      const startScreenY = e.screenY;
+      const [startPos, startSize, scaleFactor] = await Promise.all([
+        w.outerPosition(),
+        w.outerSize(),
+        w.scaleFactor(),
+      ]);
+      const minHeightPhysical = Math.round(320 * scaleFactor);
+      let pending = false;
+      let latestDy = 0;
+
+      const apply = async () => {
+        if (pending) return;
+        pending = true;
+        const dyPhysical = Math.round(latestDy * scaleFactor);
+        let newHeight = startSize.height - dyPhysical;
+        let newY = startPos.y + dyPhysical;
+        if (newHeight < minHeightPhysical) {
+          newHeight = minHeightPhysical;
+          newY = startPos.y + (startSize.height - minHeightPhysical);
+        }
+        try {
+          await w.setSize(new PhysicalSize(startSize.width, newHeight));
+          await w.setPosition(new PhysicalPosition(startPos.x, newY));
+        } catch (err) {
+          console.warn('Resize update failed:', err);
+        } finally {
+          pending = false;
+        }
+      };
+
+      const onMove = (ev: MouseEvent) => {
+        latestDy = ev.screenY - startScreenY;
+        void apply();
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
     } catch (err) {
-      console.warn('Failed to start resize dragging:', err);
+      console.warn('Failed to start top resize:', err);
     }
   }, []);
+
+  const handleSync = useCallback(async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      await forceSync();
+      await dayTasks.refreshTasks();
+      const rangeEnd = addDaysIso(today, 14);
+      try {
+        const data = await fetchSchedulesForDateRange(today, rangeEnd);
+        setScheduleCount(data.length);
+      } catch {
+        // ignore
+      }
+      setReloadKey((v) => v + 1);
+    } catch (err) {
+      console.error('Failed to sync:', err);
+    } finally {
+      setSyncing(false);
+    }
+  }, [syncing, dayTasks, today]);
 
   return (
     <main className="dashboard-page">
@@ -797,6 +882,16 @@ export default function DashboardPage() {
                 title="전체 앱 열기"
               >
                 <ExternalIcon />
+              </button>
+              <button
+                type="button"
+                className="iconbtn"
+                onClick={() => void handleSync()}
+                disabled={syncing}
+                aria-label="동기화"
+                title={syncing ? '동기화 중…' : '서버와 동기화'}
+              >
+                <SyncIcon spinning={syncing} />
               </button>
               <button
                 type="button"
@@ -853,7 +948,7 @@ export default function DashboardPage() {
         </div>
 
         {tab === 'schedules' ? (
-          <SchedulesPane today={today} />
+          <SchedulesPane today={today} reloadKey={reloadKey} />
         ) : (
         <div className="pane">
           <form className="quick" onSubmit={addTask}>
