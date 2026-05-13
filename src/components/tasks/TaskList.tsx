@@ -58,17 +58,10 @@ export default function TaskList({
     return filterTasksByStatus(base, statusFilter);
   }, [viewMode, tasks, statusFilter]);
 
-  const normalTasks = useMemo(() => {
-    const filtered = displayTasks.filter(t => !t.low_priority);
-    return sortByStatus ? sortTopLevelByStatus(filtered) : filtered;
-  }, [displayTasks, sortByStatus]);
-  const lowPriorityTasks = useMemo(() => {
-    const filtered = displayTasks.filter(t => t.low_priority);
-    return sortByStatus ? sortTopLevelByStatus(filtered) : filtered;
-  }, [displayTasks, sortByStatus]);
-
-  const [showLowPriority, setShowLowPriority] = useState(false);
-
+  const sortedTasks = useMemo(
+    () => (sortByStatus ? sortTopLevelByStatus(displayTasks) : displayTasks),
+    [displayTasks, sortByStatus],
+  );
 
   return (
     <div className="task-list">
@@ -186,13 +179,13 @@ export default function TaskList({
       {/* Task tree */}
       {tasks.length > 0 && (
         <>
-          {normalTasks.length === 0 && lowPriorityTasks.length === 0 && statusFilter && (
+          {sortedTasks.length === 0 && statusFilter && (
             <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '16px 0', fontSize: '0.875rem' }}>
               해당 상태의 작업이 없습니다.
             </p>
           )}
           <TaskTree
-            tasks={normalTasks}
+            tasks={sortedTasks}
             onComplete={onComplete}
             onUncomplete={onUncomplete}
             onDiscard={onDiscard}
@@ -205,47 +198,6 @@ export default function TaskList({
             onDeleteSnapshot={onDeleteSnapshot}
             showAddInput={false}
           />
-
-          {lowPriorityTasks.length > 0 && (
-            <div className="low-priority-section" style={{ marginTop: '16px' }}>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setShowLowPriority(!showLowPriority)}
-                style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: '4px' }}
-              >
-                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                  낮은 우선순위 할일 ({lowPriorityTasks.length})
-                </span>
-                <svg
-                  width="14" height="14"
-                  viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                  style={{ transform: showLowPriority ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', color: 'var(--text-muted)' }}
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </button>
-
-              {showLowPriority && (
-                <div style={{ marginTop: '8px' }}>
-                  <TaskTree
-                    tasks={lowPriorityTasks}
-                    onComplete={onComplete}
-                    onUncomplete={onUncomplete}
-                    onDiscard={onDiscard}
-                    onUndiscard={onUndiscard}
-                    onDelete={onDelete}
-                    onUpdateSettings={onUpdateSettings}
-                    onAddChild={onAddChild}
-                    onSaveDescription={onSaveDescription}
-                    onCreateSnapshot={onCreateSnapshot}
-                    onDeleteSnapshot={onDeleteSnapshot}
-                    showAddInput={false}
-                  />
-                </div>
-              )}
-            </div>
-          )}
         </>
       )}
     </div>

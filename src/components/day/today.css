@@ -378,57 +378,6 @@
   font-weight: 500;
 }
 
-/* === Upcoming schedules (Schedules tab) === */
-.td-upcoming {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 10px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--border-light);
-}
-
-.td-upcoming-title {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
-.td-upcoming-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.td-upcoming-day {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 4px 2px;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.td-upcoming-day-l {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.td-upcoming-day-d {
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.td-upcoming-day-n {
-  margin-left: auto;
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
 /* === Events tab === */
 .td-events {
   display: flex;
