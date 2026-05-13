@@ -25,8 +25,8 @@ interface TaskListProps {
 }
 
 const STATUS_SORT_ORDER: Record<TaskStatus, number> = {
-  in_progress: 0,
-  pending: 1,
+  pending: 0,
+  in_progress: 1,
   completed: 2,
   discarded: 3,
 };

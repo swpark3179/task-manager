@@ -942,7 +942,9 @@ export default function DashboardPage() {
     const fav: Task[] = [];
     const rest: Task[] = [];
     for (const t of filtered) {
-      if (favorites.has(t.id)) fav.push(t);
+      const status = getEffectiveStatus(t);
+      const isTerminal = status === 'completed' || status === 'discarded';
+      if (favorites.has(t.id) && !isTerminal) fav.push(t);
       else rest.push(t);
     }
     return [...sortTasksByStatus(fav), ...sortTasksByStatus(rest)];
