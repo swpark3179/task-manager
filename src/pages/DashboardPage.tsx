@@ -7,10 +7,12 @@ import { calculateStatusSummary, getEffectiveStatus, hasChildren } from '../util
 import {
   createSchedule,
   deleteSchedule,
+  fetchHolidays,
   fetchSchedulesForDateRange,
   forceSync,
 } from '../lib/database';
-import type { Schedule, Task, TaskStatus } from '../types';
+import { getHolidaysForDate } from '../utils/koreanHolidays';
+import type { Holiday, HolidayType, Schedule, Task, TaskStatus } from '../types';
 import MarkdownViewer from '../components/markdown/MarkdownViewer';
 import { openDetailWindow } from '../lib/detailWindow';
 import './DashboardPage.css';
@@ -82,6 +84,19 @@ function matchesFilter(task: Task, filter: FilterKey): boolean {
   const status = getEffectiveStatus(task);
   if (status === filter) return true;
   return (task.children || []).some((c) => matchesFilter(c, filter));
+}
+
+const STATUS_ORDER: Record<TaskStatus, number> = {
+  pending: 0,
+  in_progress: 1,
+  completed: 2,
+  discarded: 3,
+};
+
+function sortTasksByStatus(tasks: Task[]): Task[] {
+  return [...tasks].sort(
+    (a, b) => STATUS_ORDER[getEffectiveStatus(a)] - STATUS_ORDER[getEffectiveStatus(b)],
+  );
 }
 
 function ChevronIcon() {
@@ -254,7 +269,9 @@ function TaskNode({
   const doneChildren = (task.children || []).filter((c) => getEffectiveStatus(c) === 'completed').length;
   const todayMarked = !!task.has_snapshot;
   const canSnapshot = task.created_date === today && !task.is_snapshot && depth === 0;
-  const childrenVisible = (task.children || []).filter((c) => matchesFilter(c, filter));
+  const childrenVisible = sortTasksByStatus(
+    (task.children || []).filter((c) => matchesFilter(c, filter)),
+  );
 
   const submitTitle = async () => {
     const trimmed = titleDraft.trim();
@@ -789,13 +806,91 @@ function SchedulesPane({ today, reloadKey = 0 }: { today: string; reloadKey?: nu
   );
 }
 
+const HOLIDAY_TYPE_LABEL: Record<HolidayType, string> = {
+  holiday: '공휴일',
+  anniversary: '기념일',
+  birthday: '생일',
+};
+
+interface UpcomingEvent {
+  date: string;
+  title: string;
+  type: HolidayType;
+}
+
+function EventsPane({ today, reloadKey = 0 }: { today: string; reloadKey?: number }) {
+  const [userHolidays, setUserHolidays] = useState<Holiday[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchHolidays()
+      .then((data) => {
+        if (!cancelled) setUserHolidays(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const events = useMemo<UpcomingEvent[]>(() => {
+    const out: UpcomingEvent[] = [];
+    for (let i = 0; i <= 10; i++) {
+      const d = addDaysIso(today, i);
+      for (const h of getHolidaysForDate(d, userHolidays)) {
+        out.push({ date: d, title: h.title, type: h.type });
+      }
+    }
+    return out.sort((a, b) => a.date.localeCompare(b.date));
+  }, [today, userHolidays]);
+
+  return (
+    <div className="pane">
+      <div className="sch-head">
+        <div className="sch-head-l">다가오는 이벤트 (10일 이내)</div>
+      </div>
+      <div className="sch-list">
+        {loading && events.length === 0 && (
+          <div className="empty">
+            <div className="empty-t">불러오는 중…</div>
+          </div>
+        )}
+        {!loading && events.length === 0 && (
+          <div className="empty">
+            <div className="empty-t">이벤트가 없어요</div>
+            <div className="empty-s">10일 이내에 공휴일/기념일/생일이 없습니다</div>
+          </div>
+        )}
+        {events.map((ev, i) => (
+          <div key={`${ev.date}-${i}`} className={`ev-card ev-type-${ev.type}`}>
+            <div className="ev-date">
+              <div className="ev-date-l">{formatDayLabel(ev.date, today)}</div>
+              <div className="ev-date-d">{ev.date}</div>
+            </div>
+            <div className="ev-body">
+              <div className="ev-title">{ev.title}</div>
+              <div className="ev-type">{HOLIDAY_TYPE_LABEL[ev.type]}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const today = getTodayString();
   const dayTasks = useDayTasks(today);
   const [newTitle, setNewTitle] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
-  const [tab, setTab] = useState<'tasks' | 'schedules'>('tasks');
+  const [tab, setTab] = useState<'tasks' | 'schedules' | 'events'>('tasks');
   const [scheduleCount, setScheduleCount] = useState<number | null>(null);
+  const [eventCount, setEventCount] = useState<number | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
   const [syncing, setSyncing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -808,10 +903,20 @@ export default function DashboardPage() {
         if (!cancelled) setScheduleCount(data.length);
       })
       .catch(() => {});
+    fetchHolidays()
+      .then((userHolidays) => {
+        if (cancelled) return;
+        let n = 0;
+        for (let i = 0; i <= 10; i++) {
+          n += getHolidaysForDate(addDaysIso(today, i), userHolidays).length;
+        }
+        setEventCount(n);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [today]);
+  }, [today, reloadKey]);
   const summary = useMemo(() => calculateStatusSummary(dayTasks.tasks), [dayTasks.tasks]);
   const progressPct = summary.total ? Math.round((summary.completed / summary.total) * 100) : 0;
 
@@ -832,14 +937,13 @@ export default function DashboardPage() {
     const filtered = filter === 'all'
       ? dayTasks.tasks
       : dayTasks.tasks.filter((t) => matchesFilter(t, filter));
-    if (favorites.size === 0) return filtered;
     const fav: Task[] = [];
     const rest: Task[] = [];
     for (const t of filtered) {
       if (favorites.has(t.id)) fav.push(t);
       else rest.push(t);
     }
-    return [...fav, ...rest];
+    return [...sortTasksByStatus(fav), ...sortTasksByStatus(rest)];
   }, [dayTasks.tasks, favorites, filter]);
 
   const addTask = async (e: FormEvent) => {
@@ -1026,10 +1130,19 @@ export default function DashboardPage() {
           >
             일정 {scheduleCount !== null && <span className="tab-cnt">{scheduleCount}</span>}
           </button>
+          <button
+            type="button"
+            className={`tab ${tab === 'events' ? 'tab-on' : ''}`}
+            onClick={() => setTab('events')}
+          >
+            이벤트 {eventCount !== null && <span className="tab-cnt">{eventCount}</span>}
+          </button>
         </div>
 
         {tab === 'schedules' ? (
           <SchedulesPane today={today} reloadKey={reloadKey} />
+        ) : tab === 'events' ? (
+          <EventsPane today={today} reloadKey={reloadKey} />
         ) : (
         <div className="pane">
           <form className="quick" onSubmit={addTask}>

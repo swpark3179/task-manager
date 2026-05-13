@@ -915,3 +915,50 @@ body:has(.dashboard-page),
   font-size: 12px;
   margin-top: 4px;
 }
+
+/* ----- Events ----- */
+.dashboard-page .ev-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  margin-bottom: 6px;
+  border-left-width: 3px;
+}
+.dashboard-page .ev-type-holiday { border-left-color: #bf616a; }
+.dashboard-page .ev-type-anniversary { border-left-color: #8b5cf6; }
+.dashboard-page .ev-type-birthday { border-left-color: #ec4899; }
+.dashboard-page .ev-date {
+  min-width: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.dashboard-page .ev-date-l {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fg);
+}
+.dashboard-page .ev-date-d {
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.dashboard-page .ev-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dashboard-page .ev-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.dashboard-page .ev-type {
+  font-size: 11px;
+  color: var(--fg-3);
+}
