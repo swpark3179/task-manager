@@ -858,7 +858,7 @@ export default function DashboardPage() {
   }, [syncing, dayTasks, today]);
 
   return (
-    <main className="dashboard-page">
+    <main className="dashboard-page" data-tauri-drag-region>
       <div
         className="resize-top"
         onMouseDown={(e) => void startTopResize(e)}
