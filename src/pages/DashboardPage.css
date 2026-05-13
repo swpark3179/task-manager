@@ -4,7 +4,6 @@
 
 .dashboard-page {
   position: relative;
-  cursor: move;
   --bg: #ffffff;
   --bg-2: #f7f8fa;
   --bg-3: #eef0f4;
@@ -65,7 +64,6 @@ body:has(.dashboard-page),
 .dashboard-page .widget {
   background: var(--bg);
   color: var(--fg);
-  cursor: default;
   border-radius: 18px;
   box-shadow: var(--shadow);
   display: flex;
@@ -104,9 +102,7 @@ body:has(.dashboard-page),
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 12px;
-  cursor: move;
 }
-.dashboard-page .hdr-actions { cursor: default; }
 .dashboard-page .hdr-date-main {
   font-size: 15px;
   font-weight: 600;
@@ -335,6 +331,13 @@ body:has(.dashboard-page),
   background: linear-gradient(90deg, var(--accent-soft) 0%, transparent 60%);
 }
 .dashboard-page .row-doing:hover { background: var(--accent-soft); }
+.dashboard-page .row-discarded .title {
+  color: var(--fg-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--fg-3);
+  text-decoration-thickness: 1px;
+  opacity: 0.75;
+}
 
 .dashboard-page .chk {
   appearance: none;
@@ -357,6 +360,11 @@ body:has(.dashboard-page),
 .dashboard-page .chk-done { background: var(--done); border-color: var(--done); }
 .dashboard-page .chk-doing { background: var(--doing); border-color: var(--doing); }
 .dashboard-page .chk-doing svg { color: var(--accent-fg); }
+.dashboard-page .chk-discarded {
+  background: var(--bg-3);
+  border-color: var(--border-2);
+  color: var(--fg-3);
+}
 .dashboard-page .chk:disabled { cursor: default; opacity: 0.7; }
 
 .dashboard-page .row-main {

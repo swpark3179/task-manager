@@ -12,12 +12,12 @@ import {
 } from '../lib/database';
 import type { Schedule, Task, TaskStatus } from '../types';
 import MarkdownViewer from '../components/markdown/MarkdownViewer';
-import MarkdownPopup from '../components/markdown/MarkdownPopup';
+import { openDetailWindow } from '../lib/detailWindow';
 import './DashboardPage.css';
 
 const FAVORITES_STORAGE_KEY = 'task-manager.dashboard.favorites';
 
-type FilterKey = 'all' | 'in_progress' | 'pending' | 'completed';
+type FilterKey = 'all' | 'in_progress' | 'pending' | 'completed' | 'discarded';
 
 const KOR_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -77,17 +77,6 @@ function persistFavorites(favorites: Set<string>) {
   }
 }
 
-function findTaskById(tasks: Task[], id: string): Task | null {
-  for (const t of tasks) {
-    if (t.id === id) return t;
-    if (t.children && t.children.length) {
-      const found = findTaskById(t.children, id);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
 function matchesFilter(task: Task, filter: FilterKey): boolean {
   if (filter === 'all') return true;
   const status = getEffectiveStatus(task);
@@ -127,6 +116,28 @@ function TrashIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function DiscardIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+function UndoIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M9 14l-4-4 4-4 M5 10h9a5 5 0 0 1 0 10h-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function XmarkIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 6l12 12 M18 6L6 18" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }
@@ -194,6 +205,8 @@ function TaskNode({
   onCreateSnapshot,
   onDeleteSnapshot,
   onOpenDetailPopup,
+  onDiscard,
+  onUndiscard,
 }: {
   task: Task;
   depth: number;
@@ -209,6 +222,8 @@ function TaskNode({
   onCreateSnapshot: (id: string) => Promise<void>;
   onDeleteSnapshot: (id: string) => Promise<void>;
   onOpenDetailPopup: (task: Task) => void;
+  onDiscard: (id: string) => Promise<void>;
+  onUndiscard: (id: string) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<'detail' | 'log'>('detail');
@@ -276,7 +291,7 @@ function TaskNode({
           title={hasChildren(task) ? '하위 작업 상태로 자동 계산됩니다' : '상태 전환'}
           aria-label="상태 전환"
         >
-          {isDone ? <CheckIcon /> : isDoing ? <DotIcon /> : null}
+          {isDone ? <CheckIcon /> : isDoing ? <DotIcon /> : isDiscarded ? <XmarkIcon /> : null}
         </button>
         <button
           type="button"
@@ -334,6 +349,29 @@ function TaskNode({
             >
               <StarIcon filled={isFavorite} />
             </button>
+          )}
+          {!task.is_snapshot && !hasChildren(task) && (
+            isDiscarded ? (
+              <button
+                type="button"
+                className="iconbtn iconbtn-sm"
+                onClick={() => void onUndiscard(task.id)}
+                aria-label="폐기 해제"
+                title="폐기 해제"
+              >
+                <UndoIcon />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="iconbtn iconbtn-sm"
+                onClick={() => void onDiscard(task.id)}
+                aria-label="폐기"
+                title="폐기 처리"
+              >
+                <DiscardIcon />
+              </button>
+            )
           )}
           {!task.is_snapshot && (
             <button
@@ -484,6 +522,8 @@ function TaskNode({
                   onCreateSnapshot={onCreateSnapshot}
                   onDeleteSnapshot={onDeleteSnapshot}
                   onOpenDetailPopup={onOpenDetailPopup}
+                  onDiscard={onDiscard}
+                  onUndiscard={onUndiscard}
                 />
               ))}
             </div>
@@ -759,7 +799,6 @@ export default function DashboardPage() {
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
   const [syncing, setSyncing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [popupTaskId, setPopupTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -822,6 +861,7 @@ export default function DashboardPage() {
     { k: 'in_progress', l: '진행', n: summary.inProgress },
     { k: 'pending', l: '대기', n: summary.pending },
     { k: 'completed', l: '완료', n: summary.completed },
+    { k: 'discarded', l: '폐기', n: summary.discarded },
   ];
 
   const startTopResize = useCallback(async (e: React.MouseEvent) => {
@@ -899,7 +939,7 @@ export default function DashboardPage() {
   }, [syncing, dayTasks, today]);
 
   return (
-    <main className="dashboard-page" data-tauri-drag-region>
+    <main className="dashboard-page">
       <div
         className="resize-top"
         onMouseDown={(e) => void startTopResize(e)}
@@ -907,8 +947,8 @@ export default function DashboardPage() {
       />
       <div className="widget">
         <div className="hdr">
-          <div className="hdr-top" data-tauri-drag-region>
-            <div className="hdr-date" data-tauri-drag-region>
+          <div className="hdr-top">
+            <div className="hdr-date">
               <div className="hdr-date-main">{formatTodayHeader(today)}</div>
               <div className="hdr-date-sub">
                 오늘 진행 {summary.inProgress}건 · 대기 {summary.pending}건
@@ -1048,27 +1088,15 @@ export default function DashboardPage() {
                 onToggleFavorite={toggleFavorite}
                 onCreateSnapshot={dayTasks.createSnapshot}
                 onDeleteSnapshot={dayTasks.deleteSnapshot}
-                onOpenDetailPopup={(t) => setPopupTaskId(t.id)}
+                onOpenDetailPopup={(t) => void openDetailWindow(t.id, today)}
+                onDiscard={dayTasks.discard}
+                onUndiscard={dayTasks.undiscard}
               />
             ))}
           </div>
         </div>
         )}
       </div>
-      {popupTaskId && (() => {
-        const t = findTaskById(dayTasks.tasks, popupTaskId);
-        if (!t) return null;
-        return (
-          <MarkdownPopup
-            title={t.title || '제목 없음'}
-            detail={t.description ?? ''}
-            onClose={() => setPopupTaskId(null)}
-            onSave={async (next) => {
-              await dayTasks.saveDescription(t.id, next);
-            }}
-          />
-        );
-      })()}
     </main>
   );
 }

@@ -9,6 +9,7 @@ import HistoryPage from './pages/HistoryPage';
 import CalendarPage from './pages/CalendarPage';
 import SettingsPage from './pages/SettingsPage';
 import DashboardPage from './pages/DashboardPage';
+import DetailPage from './pages/DetailPage';
 import SyncBlocker from './components/common/SyncBlocker';
 import { isMobilePlatform } from './lib/runtimeWindow';
 import './index.css';
@@ -47,6 +48,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/dashboard" element={isMobile ? <Navigate to="/" replace /> : <DashboardPage />} />
+      <Route path="/detail" element={<DetailPage />} />
       <Route element={<AppShell />}>
         <Route path="/" element={<TodayPage />} />
         <Route path="/history/:date" element={<HistoryPage />} />
