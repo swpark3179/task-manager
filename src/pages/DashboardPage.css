@@ -4,6 +4,7 @@
 
 .dashboard-page {
   position: relative;
+  cursor: move;
   --bg: #ffffff;
   --bg-2: #f7f8fa;
   --bg-3: #eef0f4;
@@ -64,6 +65,7 @@ body:has(.dashboard-page),
 .dashboard-page .widget {
   background: var(--bg);
   color: var(--fg);
+  cursor: default;
   border-radius: 18px;
   box-shadow: var(--shadow);
   display: flex;
@@ -102,7 +104,9 @@ body:has(.dashboard-page),
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 12px;
+  cursor: move;
 }
+.dashboard-page .hdr-actions { cursor: default; }
 .dashboard-page .hdr-date-main {
   font-size: 15px;
   font-weight: 600;
