@@ -59,6 +59,11 @@ export async function openDetailWindow(taskId: string, date: string): Promise<vo
             console.warn('Failed to reposition existing detail window:', err);
           }
         }
+        try {
+          await existing.setAlwaysOnTop(true);
+        } catch (err) {
+          console.warn('Failed to set always-on-top on existing detail window:', err);
+        }
         await existing.show();
         await existing.unminimize();
         await existing.setFocus();
@@ -77,7 +82,7 @@ export async function openDetailWindow(taskId: string, date: string): Promise<vo
       minHeight: 320,
       resizable: true,
       decorations: true,
-      alwaysOnTop: false,
+      alwaysOnTop: true,
       focus: true,
       ...(position ? { x: position.x, y: position.y } : {}),
     });
