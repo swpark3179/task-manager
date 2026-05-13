@@ -1749,3 +1749,21 @@
   -webkit-overflow-scrolling: touch;
   will-change: transform;
 }
+
+/* Inside the day modal, let the outer .modal-body-scroll be the single
+   scroll container so list items aren't clipped by an inner overflow box. */
+.calendar-day-modal .modal-body-scroll .td-page {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.calendar-day-modal .modal-body-scroll .td-card {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.calendar-day-modal .modal-body-scroll .td-card-body {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
+}

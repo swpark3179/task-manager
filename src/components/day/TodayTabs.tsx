@@ -2,10 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import TaskList from '../tasks/TaskList';
 import ScheduleSection from '../schedules/ScheduleSection';
 import ScheduleModal from '../schedules/ScheduleModal';
-import {
-  fetchHolidays,
-  fetchSchedulesForDateRange,
-} from '../../lib/database';
+import { fetchHolidays, fetchSchedulesForDateRange } from '../../lib/database';
 import { useSyncStatus } from '../common/SyncIndicator';
 import { getScheduleFromMemoryCacheSync } from '../../lib/cache';
 import { getHolidaysForDate } from '../../utils/koreanHolidays';
@@ -28,7 +25,6 @@ const HOLIDAY_TYPE_LABEL: Record<HolidayType, string> = {
 
 const KOR_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const EVENT_DAYS_AHEAD = 10;
-const SCHEDULE_DAYS_AHEAD = 14;
 
 function formatDayLabel(iso: string, today: string): string {
   const d = new Date(iso + 'T00:00:00');
@@ -62,7 +58,6 @@ export default function TodayTabs({ date, isToday, onSummaryChange, onMutate }: 
       .filter((s) => s.start_date <= date && s.end_date >= date)
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
   });
-  const [upcomingSchedules, setUpcomingSchedules] = useState<Schedule[]>([]);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [userHolidays, setUserHolidays] = useState<Holiday[]>([]);
@@ -83,20 +78,9 @@ export default function TodayTabs({ date, isToday, onSummaryChange, onMutate }: 
     }
   }, [date]);
 
-  const loadUpcomingSchedules = useCallback(async () => {
-    try {
-      const end = addDaysIso(date, SCHEDULE_DAYS_AHEAD);
-      const data = await fetchSchedulesForDateRange(date, end);
-      setUpcomingSchedules(data);
-    } catch (err) {
-      console.error('Failed to load upcoming schedules:', err);
-    }
-  }, [date]);
-
   useEffect(() => {
     void loadSchedules();
-    void loadUpcomingSchedules();
-  }, [date, loadSchedules, loadUpcomingSchedules]);
+  }, [date, loadSchedules]);
 
   useEffect(() => {
     fetchHolidays().then(setUserHolidays).catch(() => {});
@@ -107,16 +91,14 @@ export default function TodayTabs({ date, isToday, onSummaryChange, onMutate }: 
     previousSyncStatusRef.current = syncStatus;
     if (prev === 'syncing' && syncStatus === 'synced') {
       void loadSchedules();
-      void loadUpcomingSchedules();
     }
-  }, [loadSchedules, loadUpcomingSchedules, syncStatus]);
+  }, [loadSchedules, syncStatus]);
 
   useEffect(() => {
     if (dayTasks.lastMutationId === 0) return;
     void loadSchedules();
-    void loadUpcomingSchedules();
     onMutate?.();
-  }, [dayTasks.lastMutationId, loadSchedules, loadUpcomingSchedules, onMutate]);
+  }, [dayTasks.lastMutationId, loadSchedules, onMutate]);
 
   const mainTasks = useMemo(
     () => dayTasks.tasks.filter((t) => !t.low_priority),
@@ -144,21 +126,6 @@ export default function TodayTabs({ date, isToday, onSummaryChange, onMutate }: 
     return out.sort((a, b) => a.date.localeCompare(b.date));
   }, [date, userHolidays]);
 
-  const groupedUpcomingSchedules = useMemo(() => {
-    const grouped: Record<string, Schedule[]> = {};
-    [...upcomingSchedules]
-      .sort((a, b) => {
-        const da = a.start_date.localeCompare(b.start_date);
-        if (da !== 0) return da;
-        return (a.scheduled_time ?? '').localeCompare(b.scheduled_time ?? '');
-      })
-      .forEach((s) => {
-        const day = s.start_date;
-        (grouped[day] = grouped[day] || []).push(s);
-      });
-    return grouped;
-  }, [upcomingSchedules]);
-
   const todayString = getTodayString();
   const referenceDay = isToday ? todayString : date;
 
@@ -174,10 +141,9 @@ export default function TodayTabs({ date, isToday, onSummaryChange, onMutate }: 
     await Promise.all([
       dayTasks.refreshTasks(),
       loadSchedules(),
-      loadUpcomingSchedules(),
     ]);
     onMutate?.();
-  }, [dayTasks, loadSchedules, loadUpcomingSchedules, onMutate]);
+  }, [dayTasks, loadSchedules, onMutate]);
 
   return (
     <div className="td-card">
@@ -291,27 +257,6 @@ export default function TodayTabs({ date, isToday, onSummaryChange, onMutate }: 
               }}
               emptyText={isToday ? '오늘 예정된 일정이 없습니다.' : '이 날짜에 걸쳐있는 일정이 없습니다.'}
             />
-            {Object.keys(groupedUpcomingSchedules).length > 0 && (
-              <div className="td-upcoming">
-                <div className="td-upcoming-title">다가오는 일정 ({SCHEDULE_DAYS_AHEAD}일 이내)</div>
-                {Object.entries(groupedUpcomingSchedules).map(([day, items]) => (
-                  <div key={day} className="td-upcoming-group">
-                    <div className="td-upcoming-day">
-                      <span className="td-upcoming-day-l">{formatDayLabel(day, referenceDay)}</span>
-                      <span className="td-upcoming-day-d">{day}</span>
-                      <span className="td-upcoming-day-n">{items.length}건</span>
-                    </div>
-                    <ScheduleSection
-                      schedules={items}
-                      onEdit={(s) => {
-                        setEditingSchedule(s);
-                        setShowScheduleModal(true);
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
