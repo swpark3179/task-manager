@@ -12,6 +12,7 @@ import {
 } from '../lib/database';
 import type { Schedule, Task, TaskStatus } from '../types';
 import MarkdownViewer from '../components/markdown/MarkdownViewer';
+import MarkdownPopup from '../components/markdown/MarkdownPopup';
 import './DashboardPage.css';
 
 const FAVORITES_STORAGE_KEY = 'task-manager.dashboard.favorites';
@@ -76,6 +77,17 @@ function persistFavorites(favorites: Set<string>) {
   }
 }
 
+function findTaskById(tasks: Task[], id: string): Task | null {
+  for (const t of tasks) {
+    if (t.id === id) return t;
+    if (t.children && t.children.length) {
+      const found = findTaskById(t.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 function matchesFilter(task: Task, filter: FilterKey): boolean {
   if (filter === 'all') return true;
   const status = getEffectiveStatus(task);
@@ -132,6 +144,13 @@ function MinimizeIcon() {
     </svg>
   );
 }
+function ExpandIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 14v6h6 M20 10V4h-6 M20 4l-7 7 M4 20l7-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 function ExternalIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -174,6 +193,7 @@ function TaskNode({
   onToggleFavorite,
   onCreateSnapshot,
   onDeleteSnapshot,
+  onOpenDetailPopup,
 }: {
   task: Task;
   depth: number;
@@ -188,6 +208,7 @@ function TaskNode({
   onToggleFavorite: (id: string) => void;
   onCreateSnapshot: (id: string) => Promise<void>;
   onDeleteSnapshot: (id: string) => Promise<void>;
+  onOpenDetailPopup: (task: Task) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<'detail' | 'log'>('detail');
@@ -395,16 +416,34 @@ function TaskNode({
                   </div>
                 </>
               ) : (
-                <div onClick={() => setEditingDetail(true)}>
-                  {task.description ? (
-                    <div className="md">
-                      <MarkdownViewer content={task.description} />
-                    </div>
-                  ) : (
-                    <div className="md-empty">
-                      <span>상세 내용 없음 — 클릭해서 마크다운으로 추가</span>
-                    </div>
-                  )}
+                <div className="detail-wrap">
+                  <button
+                    type="button"
+                    className="iconbtn iconbtn-sm detail-expand"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenDetailPopup(task);
+                    }}
+                    aria-label="상세 팝업 열기"
+                    title="상세 팝업 열기"
+                  >
+                    <ExpandIcon />
+                  </button>
+                  <div
+                    className="detail-brief"
+                    onClick={() => onOpenDetailPopup(task)}
+                    title="클릭해서 상세 보기"
+                  >
+                    {task.description && task.description.trim() ? (
+                      <div className="md md-brief">
+                        <MarkdownViewer content={task.description} />
+                      </div>
+                    ) : (
+                      <div className="md-empty">
+                        <span>상세 내용 없음 — 클릭해서 추가</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -444,6 +483,7 @@ function TaskNode({
                   onToggleFavorite={onToggleFavorite}
                   onCreateSnapshot={onCreateSnapshot}
                   onDeleteSnapshot={onDeleteSnapshot}
+                  onOpenDetailPopup={onOpenDetailPopup}
                 />
               ))}
             </div>
@@ -719,6 +759,7 @@ export default function DashboardPage() {
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
   const [syncing, setSyncing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [popupTaskId, setPopupTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1007,12 +1048,27 @@ export default function DashboardPage() {
                 onToggleFavorite={toggleFavorite}
                 onCreateSnapshot={dayTasks.createSnapshot}
                 onDeleteSnapshot={dayTasks.deleteSnapshot}
+                onOpenDetailPopup={(t) => setPopupTaskId(t.id)}
               />
             ))}
           </div>
         </div>
         )}
       </div>
+      {popupTaskId && (() => {
+        const t = findTaskById(dayTasks.tasks, popupTaskId);
+        if (!t) return null;
+        return (
+          <MarkdownPopup
+            title={t.title || '제목 없음'}
+            detail={t.description ?? ''}
+            onClose={() => setPopupTaskId(null)}
+            onSave={async (next) => {
+              await dayTasks.saveDescription(t.id, next);
+            }}
+          />
+        );
+      })()}
     </main>
   );
 }
