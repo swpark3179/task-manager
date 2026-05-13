@@ -4,10 +4,14 @@
   "description": "Capability for the main and dashboard windows",
   "windows": [
     "main",
-    "dashboard"
+    "dashboard",
+    "detail-*"
   ],
   "permissions": [
     "core:default",
+    "core:webview:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:default",
     "opener:default",
     "store:default",
     "fs:default",
