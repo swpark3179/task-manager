@@ -888,7 +888,7 @@ export default function DashboardPage() {
   const dayTasks = useDayTasks(today);
   const [newTitle, setNewTitle] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
-  const [tab, setTab] = useState<'tasks' | 'schedules' | 'events'>('tasks');
+  const [tab, setTab] = useState<'tasks' | 'schedules' | 'events' | 'later'>('tasks');
   const [scheduleCount, setScheduleCount] = useState<number | null>(null);
   const [eventCount, setEventCount] = useState<number | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
@@ -917,7 +917,9 @@ export default function DashboardPage() {
       cancelled = true;
     };
   }, [today, reloadKey]);
-  const summary = useMemo(() => calculateStatusSummary(dayTasks.tasks), [dayTasks.tasks]);
+  const mainTasks = useMemo(() => dayTasks.tasks.filter((t) => !t.low_priority), [dayTasks.tasks]);
+  const laterTasks = useMemo(() => dayTasks.tasks.filter((t) => t.low_priority), [dayTasks.tasks]);
+  const summary = useMemo(() => calculateStatusSummary(mainTasks), [mainTasks]);
   const progressPct = summary.total ? Math.round((summary.completed / summary.total) * 100) : 0;
 
   useEffect(() => {
@@ -935,8 +937,8 @@ export default function DashboardPage() {
 
   const visibleRoots = useMemo(() => {
     const filtered = filter === 'all'
-      ? dayTasks.tasks
-      : dayTasks.tasks.filter((t) => matchesFilter(t, filter));
+      ? mainTasks
+      : mainTasks.filter((t) => matchesFilter(t, filter));
     const fav: Task[] = [];
     const rest: Task[] = [];
     for (const t of filtered) {
@@ -944,7 +946,14 @@ export default function DashboardPage() {
       else rest.push(t);
     }
     return [...sortTasksByStatus(fav), ...sortTasksByStatus(rest)];
-  }, [dayTasks.tasks, favorites, filter]);
+  }, [mainTasks, favorites, filter]);
+
+  const laterVisible = useMemo(() => {
+    const filtered = filter === 'all'
+      ? laterTasks
+      : laterTasks.filter((t) => matchesFilter(t, filter));
+    return sortTasksByStatus(filtered);
+  }, [laterTasks, filter]);
 
   const addTask = async (e: FormEvent) => {
     e.preventDefault();
@@ -1137,12 +1146,72 @@ export default function DashboardPage() {
           >
             이벤트 {eventCount !== null && <span className="tab-cnt">{eventCount}</span>}
           </button>
+          <button
+            type="button"
+            className={`tab ${tab === 'later' ? 'tab-on' : ''}`}
+            onClick={() => setTab('later')}
+          >
+            나중할일 <span className="tab-cnt">{laterTasks.length}</span>
+          </button>
         </div>
 
         {tab === 'schedules' ? (
           <SchedulesPane today={today} reloadKey={reloadKey} />
         ) : tab === 'events' ? (
           <EventsPane today={today} reloadKey={reloadKey} />
+        ) : tab === 'later' ? (
+          <div className="pane">
+            <div className="filters">
+              {filterButtons.map((f) => (
+                <button
+                  key={f.k}
+                  type="button"
+                  className={`filter ${filter === f.k ? 'filter-on' : ''}`}
+                  onClick={() => setFilter(f.k)}
+                >
+                  {f.l} <span className="filter-n">{f.n}</span>
+                </button>
+              ))}
+            </div>
+            <div className="list">
+              {dayTasks.loading && laterTasks.length === 0 && (
+                <div className="empty">
+                  <div className="empty-t">불러오는 중…</div>
+                </div>
+              )}
+              {!dayTasks.loading && laterVisible.length === 0 && (
+                <div className="empty">
+                  <div className="empty-t">
+                    {laterTasks.length === 0 ? '나중에 할 일이 없어요' : '해당 항목이 없어요'}
+                  </div>
+                  {laterTasks.length === 0 && (
+                    <div className="empty-s">작업 설정에서 낮은 우선순위로 표시하면 여기 모입니다</div>
+                  )}
+                </div>
+              )}
+              {laterVisible.map((task) => (
+                <TaskNode
+                  key={task.id}
+                  task={task}
+                  depth={0}
+                  today={today}
+                  isFavorite={favorites.has(task.id)}
+                  filter={filter}
+                  onToggleStatus={toggleStatus}
+                  onSaveTitle={(item, title) => dayTasks.updateSettings(item.id, { title })}
+                  onSaveDescription={(item, value) => dayTasks.saveDescription(item.id, value)}
+                  onAddChild={dayTasks.addChild}
+                  onDelete={(id) => dayTasks.deleteTaskById(id, { confirm: false })}
+                  onToggleFavorite={toggleFavorite}
+                  onCreateSnapshot={dayTasks.createSnapshot}
+                  onDeleteSnapshot={dayTasks.deleteSnapshot}
+                  onOpenDetailPopup={(t) => void openDetailWindow(t.id, today)}
+                  onDiscard={dayTasks.discard}
+                  onUndiscard={dayTasks.undiscard}
+                />
+              ))}
+            </div>
+          </div>
         ) : (
         <div className="pane">
           <form className="quick" onSubmit={addTask}>
