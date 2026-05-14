@@ -1,0 +1,471 @@
+/* ============================================================
+   Activity Report — daily activity classifier popup (Windows tray)
+   Theme aligned with DashboardPage widget
+   ============================================================ */
+
+.activity-report-page {
+  position: relative;
+  --bg: #ffffff;
+  --bg-2: #f7f8fa;
+  --bg-3: #eef0f4;
+  --fg: #1c2230;
+  --fg-2: #4a5366;
+  --fg-3: #8a93a6;
+  --border: #e6e9ef;
+  --border-2: #d3d7e0;
+  --accent: #4f7cff;
+  --accent-soft: #e6edff;
+  --accent-fg: #ffffff;
+  --done: #51a36e;
+  --done-soft: #e7f4ec;
+  --doing: var(--accent);
+  --doing-soft: var(--accent-soft);
+  --todo: #8a93a6;
+  --todo-soft: #eef0f4;
+  --warn: #c8643c;
+  --warn-soft: #fbeadd;
+  --shadow: 0 24px 60px -12px rgba(15, 23, 42, 0.18),
+            0 8px 24px -8px rgba(15, 23, 42, 0.10),
+            0 0 0 1px rgba(15, 23, 42, 0.04);
+
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  padding: 14px;
+  background: transparent;
+  font-feature-settings: 'tnum';
+}
+
+html:has(.activity-report-page),
+body:has(.activity-report-page),
+#root:has(.activity-report-page) {
+  background: transparent !important;
+}
+
+.activity-report-page .resize-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  cursor: ns-resize;
+  z-index: 50;
+  background: transparent;
+  -webkit-app-region: no-drag;
+}
+
+.activity-report-page .widget {
+  background: var(--bg);
+  color: var(--fg);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.45;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: 500px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ----- Header ----- */
+.activity-report-page .hdr {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+  flex-shrink: 0;
+}
+.activity-report-page .hdr-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.activity-report-page .hdr-titles {
+  min-width: 0;
+}
+.activity-report-page .hdr-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--fg-3);
+  text-transform: uppercase;
+}
+.activity-report-page .hdr-date {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.activity-report-page .hdr-sub {
+  font-size: 11.5px;
+  color: var(--fg-3);
+  margin-top: 2px;
+}
+.activity-report-page .hdr-actions { display: flex; gap: 4px; }
+
+.activity-report-page .iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-2);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.activity-report-page .iconbtn:hover:not(:disabled) {
+  background: var(--bg-3);
+  color: var(--fg);
+}
+.activity-report-page .iconbtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ----- Date navigator ----- */
+.activity-report-page .datenav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.activity-report-page .datenav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg-2);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.activity-report-page .datenav-btn:hover { background: var(--bg-3); color: var(--fg); border-color: var(--border-2); }
+.activity-report-page .datenav-today {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.activity-report-page .datenav-input {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 12px;
+  font-family: inherit;
+}
+.activity-report-page .datenav-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ----- Stats ----- */
+.activity-report-page .stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+.activity-report-page .stat {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 4px;
+  text-align: center;
+}
+.activity-report-page .stat-val {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  line-height: 1.1;
+}
+.activity-report-page .stat-lbl {
+  font-size: 10.5px;
+  color: var(--fg-3);
+  margin-top: 2px;
+}
+.activity-report-page .stat-done .stat-val { color: var(--done); }
+.activity-report-page .stat-doing .stat-val { color: var(--doing); }
+.activity-report-page .stat-todo .stat-val { color: var(--todo); }
+.activity-report-page .stat-discard .stat-val { color: var(--warn); }
+
+/* ----- Toolbar (group axis + copy format) ----- */
+.activity-report-page .toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.activity-report-page .seg {
+  display: inline-flex;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.activity-report-page .seg-btn {
+  border: none;
+  background: transparent;
+  color: var(--fg-3);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+.activity-report-page .seg-btn:hover { color: var(--fg); }
+.activity-report-page .seg-btn-on {
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+.activity-report-page .seg-lbl {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg-3);
+  margin-right: 4px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ----- Body ----- */
+.activity-report-page .body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.activity-report-page .empty {
+  text-align: center;
+  padding: 28px 16px;
+  color: var(--fg-3);
+}
+.activity-report-page .empty-t { font-size: 13px; font-weight: 600; color: var(--fg-2); }
+.activity-report-page .empty-s { font-size: 11.5px; margin-top: 4px; }
+
+.activity-report-page .group {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.activity-report-page .group-hdr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+}
+.activity-report-page .group-bullet {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--todo);
+}
+.activity-report-page .group-bullet.done { background: var(--done); }
+.activity-report-page .group-bullet.doing { background: var(--doing); }
+.activity-report-page .group-bullet.todo { background: var(--todo); }
+.activity-report-page .group-bullet.discard { background: var(--warn); }
+.activity-report-page .group-bullet.priority-normal { background: var(--accent); }
+.activity-report-page .group-bullet.priority-later { background: var(--todo); }
+.activity-report-page .group-bullet.snap-yes { background: var(--done); }
+.activity-report-page .group-bullet.snap-no { background: var(--todo); }
+.activity-report-page .group-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg);
+  flex: 1;
+}
+.activity-report-page .group-cnt {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-3);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.activity-report-page .copy-btn {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.activity-report-page .copy-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.activity-report-page .copy-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.activity-report-page .group-body { padding: 4px 0; }
+.activity-report-page .item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.1s;
+  font-size: 12.5px;
+}
+.activity-report-page .item:hover { background: var(--bg-2); }
+.activity-report-page .item-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.activity-report-page .item-tag.done { background: var(--done-soft); color: var(--done); }
+.activity-report-page .item-tag.doing { background: var(--doing-soft); color: var(--doing); }
+.activity-report-page .item-tag.todo { background: var(--todo-soft); color: var(--fg-2); }
+.activity-report-page .item-tag.discard { background: var(--warn-soft); color: var(--warn); }
+.activity-report-page .item-title {
+  color: var(--fg);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.activity-report-page .item-title.discarded {
+  color: var(--fg-3);
+  text-decoration: line-through;
+}
+.activity-report-page .item-extras {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.activity-report-page .item-pin {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.activity-report-page .item-later {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--fg-3);
+  background: var(--bg-3);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.activity-report-page .item-indent {
+  display: inline-block;
+  width: 14px;
+  flex-shrink: 0;
+}
+
+/* ----- Footer ----- */
+.activity-report-page .footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg) 100%);
+  flex-shrink: 0;
+}
+.activity-report-page .footer-hint {
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.activity-report-page .btn-primary {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: filter 0.12s, transform 0.06s;
+}
+.activity-report-page .btn-primary:hover:not(:disabled) { filter: brightness(1.05); }
+.activity-report-page .btn-primary:active { transform: translateY(1px); }
+.activity-report-page .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ----- Toast ----- */
+.activity-report-page .toast {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  pointer-events: none;
+  animation: ar-toast-in 0.18s ease-out;
+  box-shadow: 0 10px 30px -8px rgba(15, 23, 42, 0.4);
+  z-index: 60;
+}
+@keyframes ar-toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ----- Loading spinner ----- */
+@keyframes activity-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.activity-report-page .spin {
+  animation: activity-spin 0.9s linear infinite;
+  transform-origin: 50% 50%;
+}

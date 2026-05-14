@@ -34,6 +34,22 @@
         "decorations": false,
         "transparent": true,
         "shadow": false
+      },
+      {
+        "label": "activity-report",
+        "title": "Task Manager - 활동 보고서",
+        "url": "index.html#/activity-report",
+        "visible": false,
+        "width": 460,
+        "height": 620,
+        "minWidth": 380,
+        "minHeight": 360,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false
       }
     ],
     "security": {
