@@ -1,10 +1,31 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, format, parseISO, startOfWeek } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { fetchCalendarData } from '../../lib/database';
+import { fetchCalendarData, forceSync } from '../../lib/database';
 import { useSyncStatus } from '../common/SyncIndicator';
 import { formatDate, getTodayString, getNextDay, getPrevDay } from '../../utils/dateUtils';
 import type { CalendarCellData, TaskStatusSummary } from '../../types';
+
+function SyncIcon({ spinning }: { spinning?: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      className={spinning ? 'td-sync-spin' : undefined}
+    >
+      <path
+        d="M21 12a9 9 0 0 1-15.5 6.3M3 12a9 9 0 0 1 15.5-6.3M21 4v5h-5M3 20v-5h5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 const DOW_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -29,6 +50,19 @@ function pct(s?: TaskStatusSummary) {
 export default function TodayHero({ selectedDate, onSelectDate, liveSummary }: TodayHeroProps) {
   const today = getTodayString();
   const syncStatus = useSyncStatus();
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSync = useCallback(async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      await forceSync();
+    } catch (err) {
+      console.error('Failed to sync:', err);
+    } finally {
+      setSyncing(false);
+    }
+  }, [syncing]);
 
   const weekDates = useMemo(() => {
     const start = startOfWeek(parseISO(selectedDate), { weekStartsOn: 0 });
@@ -79,8 +113,20 @@ export default function TodayHero({ selectedDate, onSelectDate, liveSummary }: T
   return (
     <div className="td-hero">
       <div className="td-hero-left">
-        <div className="td-hero-eyebrow">
-          {selectedDate === today ? '오늘의 할일' : '할일'}
+        <div className="td-hero-eyebrow-row">
+          <div className="td-hero-eyebrow">
+            {selectedDate === today ? '오늘의 할일' : '할일'}
+          </div>
+          <button
+            type="button"
+            className="td-hero-sync-btn"
+            onClick={() => void handleSync()}
+            disabled={syncing}
+            aria-label="동기화"
+            title={syncing ? '동기화 중…' : '서버와 동기화'}
+          >
+            <SyncIcon spinning={syncing} />
+          </button>
         </div>
         <div className="td-hero-date">
           <span className="td-hero-date-main">{dateBig}</span>

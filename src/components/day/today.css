@@ -36,12 +36,51 @@
   flex: 0 0 auto;
 }
 
+.td-hero-eyebrow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .td-hero-eyebrow {
   font-size: 0.6875rem;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.12em;
+}
+
+.td-hero-sync-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.td-hero-sync-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.td-hero-sync-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.td-sync-spin {
+  animation: spin 0.9s linear infinite;
+  transform-origin: 50% 50%;
 }
 
 .td-hero-date {
@@ -73,12 +112,13 @@
 }
 
 .td-hero-prog-bar {
-  width: 180px;
-  height: 6px;
+  width: 150px;
+  height: 5px;
   background: var(--bg-tertiary, var(--border-light));
   border-radius: 999px;
   overflow: hidden;
   position: relative;
+  flex: 0 1 auto;
 }
 
 .td-hero-prog-fill {
@@ -89,10 +129,12 @@
 }
 
 .td-hero-prog-txt {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .td-hero-right {
@@ -290,18 +332,6 @@
   color: #fff;
 }
 
-.td-tabs-spacer {
-  flex: 1 1 auto;
-}
-
-.td-tabs-meta {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  padding: 0 6px;
-}
-
 .td-card-body {
   padding: 14px 16px 16px;
   display: flex;
@@ -487,12 +517,18 @@
   }
 
   .td-hero-prog-bar {
-    width: 100%;
+    width: auto;
     flex: 1 1 auto;
+    min-width: 0;
   }
 
   .td-hero-progress {
     width: 100%;
+    gap: 8px;
+  }
+
+  .td-hero-prog-txt {
+    font-size: 0.7rem;
   }
 
   .td-hero-right {
@@ -540,15 +576,6 @@
     font-size: 0.6875rem;
     padding: 1px 5px;
     min-width: 16px;
-  }
-
-  .td-tabs-meta {
-    font-size: 0.7rem;
-    padding: 0 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
   }
 
   .td-card-body {
