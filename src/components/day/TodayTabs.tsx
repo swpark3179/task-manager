@@ -133,9 +133,6 @@ export default function TodayTabs({ date, isToday, onSummaryChange, onMutate }: 
   const scheduleTotal = schedules.length;
   const eventTotal = events.length;
   const laterTotal = laterTasks.length;
-  const completedRatio = summary.total - summary.discarded > 0
-    ? Math.round((summary.completed / (summary.total - summary.discarded)) * 100)
-    : 0;
 
   const refresh = useCallback(async () => {
     await Promise.all([
@@ -188,12 +185,6 @@ export default function TodayTabs({ date, isToday, onSummaryChange, onMutate }: 
           <span className="td-tab-l">나중에 할일</span>
           <span className="td-tab-n">{laterTotal}</span>
         </button>
-        <div className="td-tabs-spacer" />
-        {activeTab === 'tasks' && summary.total > 0 && (
-          <span className="td-tabs-meta">
-            {summary.completed}/{summary.total - summary.discarded} · {completedRatio}%
-          </span>
-        )}
       </div>
 
       {holidays.length > 0 && (
