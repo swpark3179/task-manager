@@ -10,10 +10,15 @@ use tauri::AppHandle;
 
 const DASHBOARD_LABEL: &str = "dashboard";
 const MAIN_LABEL: &str = "main";
+const ACTIVITY_REPORT_LABEL: &str = "activity-report";
 const DASHBOARD_WIDTH: f64 = 420.0;
 const DASHBOARD_HEIGHT: f64 = 640.0;
 const DASHBOARD_MARGIN_RIGHT: f64 = 12.0;
 const DASHBOARD_MARGIN_BOTTOM: f64 = 48.0;
+const ACTIVITY_REPORT_WIDTH: f64 = 460.0;
+const ACTIVITY_REPORT_HEIGHT: f64 = 620.0;
+const ACTIVITY_REPORT_MARGIN_RIGHT: f64 = 12.0;
+const ACTIVITY_REPORT_MARGIN_BOTTOM: f64 = 48.0;
 
 // Proxy HTTP request through a configured proxy server
 #[tauri::command]
@@ -144,6 +149,74 @@ fn hide_dashboard(_app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(desktop)]
+fn activity_report_window(app: &AppHandle) -> Result<WebviewWindow, String> {
+    app.get_webview_window(ACTIVITY_REPORT_LABEL)
+        .ok_or_else(|| "activity report window was not found".to_string())
+}
+
+#[cfg(desktop)]
+fn position_activity_report(window: &WebviewWindow) -> tauri::Result<()> {
+    let Some(monitor) = window.current_monitor()?.or(window.primary_monitor()?) else {
+        return Ok(());
+    };
+
+    let work_area = monitor.work_area();
+    let scale_factor = monitor.scale_factor();
+    let width = (ACTIVITY_REPORT_WIDTH * scale_factor).round() as i32;
+    let current_size = window.outer_size()?;
+    let height = if current_size.height > 0 {
+        current_size.height as i32
+    } else {
+        (ACTIVITY_REPORT_HEIGHT * scale_factor).round() as i32
+    };
+    let margin_right = (ACTIVITY_REPORT_MARGIN_RIGHT * scale_factor).round() as i32;
+    let margin_bottom = (ACTIVITY_REPORT_MARGIN_BOTTOM * scale_factor).round() as i32;
+    let x = work_area.position.x + work_area.size.width as i32 - width - margin_right;
+    let y = work_area.position.y + work_area.size.height as i32 - height - margin_bottom;
+
+    window.set_position(PhysicalPosition::new(
+        x.max(work_area.position.x),
+        y.max(work_area.position.y),
+    ))
+}
+
+#[cfg(desktop)]
+fn show_activity_report_inner(app: &AppHandle) -> Result<(), String> {
+    let window = activity_report_window(app)?;
+    position_activity_report(&window).map_err(|e| e.to_string())?;
+    window.show().map_err(|e| e.to_string())?;
+    window.unminimize().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[cfg(desktop)]
+fn show_activity_report(app: AppHandle) -> Result<(), String> {
+    show_activity_report_inner(&app)
+}
+
+#[tauri::command]
+#[cfg(not(desktop))]
+fn show_activity_report(_app: AppHandle) -> Result<(), String> {
+    Err("show_activity_report is only available on desktop".to_string())
+}
+
+#[tauri::command]
+#[cfg(desktop)]
+fn hide_activity_report(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(ACTIVITY_REPORT_LABEL) {
+        window.hide().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+#[cfg(not(desktop))]
+fn hide_activity_report(_app: AppHandle) -> Result<(), String> {
+    Ok(())
+}
+
 #[tauri::command]
 #[cfg(desktop)]
 fn open_main(app: AppHandle, route: Option<String>) -> Result<(), String> {
@@ -177,10 +250,20 @@ fn open_main(_app: AppHandle, _route: Option<String>) -> Result<(), String> {
 fn setup_tray(app: &App) -> tauri::Result<()> {
     let open_dashboard =
         MenuItem::with_id(app, "open_dashboard", "Open Dashboard", true, None::<&str>)?;
+    let open_activity_report = MenuItem::with_id(
+        app,
+        "open_activity_report",
+        "활동 보고서",
+        true,
+        None::<&str>,
+    )?;
     let open_full_app =
         MenuItem::with_id(app, "open_full_app", "Open Full App", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open_dashboard, &open_full_app, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[&open_dashboard, &open_activity_report, &open_full_app, &quit],
+    )?;
 
     let mut tray = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
@@ -188,6 +271,12 @@ fn setup_tray(app: &App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open_dashboard" => {
                 report_tray_error("show dashboard from tray menu", show_dashboard(app));
+            }
+            "open_activity_report" => {
+                report_tray_error(
+                    "show activity report from tray menu",
+                    show_activity_report_inner(app),
+                );
             }
             "open_full_app" => {
                 report_tray_error("open full app from tray menu", open_main(app.clone(), None));
@@ -236,7 +325,10 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             #[cfg(desktop)]
-            if window.label() == DASHBOARD_LABEL || window.label() == MAIN_LABEL {
+            if window.label() == DASHBOARD_LABEL
+                || window.label() == MAIN_LABEL
+                || window.label() == ACTIVITY_REPORT_LABEL
+            {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     if let Err(err) = window.hide() {
@@ -249,7 +341,9 @@ pub fn run() {
             proxy_request,
             toggle_dashboard,
             hide_dashboard,
-            open_main
+            open_main,
+            show_activity_report,
+            hide_activity_report
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

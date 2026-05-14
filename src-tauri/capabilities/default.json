@@ -5,6 +5,7 @@
   "windows": [
     "main",
     "dashboard",
+    "activity-report",
     "detail-*"
   ],
   "permissions": [
