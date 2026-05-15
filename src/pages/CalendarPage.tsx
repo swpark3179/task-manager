@@ -25,9 +25,11 @@ import "./Pages.css";
 
 const BAR_HEIGHT = 16;
 const BAR_GAP = 2;
-// Combined cap on schedules + tasks displayed in a single calendar cell.
-// Anything beyond this is collapsed into a single "+N" indicator so cells
-// stay legible when a day has many items.
+const ROW_PITCH = BAR_HEIGHT + BAR_GAP;
+// Combined cap on events + schedules + tasks displayed in a single calendar
+// cell. Anything beyond this is collapsed into a single "+N" indicator so
+// cells stay legible when a day has many items. Events fill slots first,
+// then schedules, then tasks.
 const MAX_VISIBLE_PER_CELL = 3;
 
 type ScheduleBar = {
@@ -365,8 +367,11 @@ export default function CalendarPage() {
     return calendarData.find((c) => c.date === dateStr);
   };
 
-  // Compute schedule bars with lane assignment for each week
-  const computeWeekBars = (week: (Date | null)[]): WeekBarsResult => {
+  // Compute schedule bars with lane assignment for each week. `laneCap` is the
+  // number of schedule lanes that fit after events have taken their slots at
+  // the top of every cell in the week. Bars beyond the cap are surfaced via
+  // the per-cell "+N" overflow indicator instead of being rendered.
+  const computeWeekBars = (week: (Date | null)[], laneCap: number): WeekBarsResult => {
     const scheduleMap = new Map<string, Schedule>();
     for (const d of week) {
       if (!d) continue;
@@ -424,11 +429,9 @@ export default function CalendarPage() {
       return { ...item, lane };
     });
 
-    // Cap visible lanes so that schedule bars never exceed MAX_VISIBLE_PER_CELL.
-    // Bars assigned to lanes beyond the cap are kept aside and surfaced as part
-    // of the per-cell overflow indicator instead of being rendered.
-    const visibleBars = allBars.filter((b) => b.lane < MAX_VISIBLE_PER_CELL);
-    const hiddenBars = allBars.filter((b) => b.lane >= MAX_VISIBLE_PER_CELL);
+    const cap = Math.max(0, laneCap);
+    const visibleBars = allBars.filter((b) => b.lane < cap);
+    const hiddenBars = allBars.filter((b) => b.lane >= cap);
     return { visibleBars, hiddenBars };
   };
 
@@ -840,9 +843,32 @@ export default function CalendarPage() {
           onAnimationEnd={() => setSlideDirection(null)}
         >
           {weeks.map((week, wIdx) => {
-            const { visibleBars: bars, hiddenBars } = computeWeekBars(week);
+            // Per-cell event lists (filtered by the active category/type filters).
+            const cellHolidaysPerCell = week.map((date) => {
+              if (!date) return [] as Holiday[];
+              const ds = formatDate(date);
+              return (holidaysByDate.get(ds) || []).filter(
+                (h) => !hiddenFilters.has(`__${h.type}`),
+              );
+            });
+
+            // Events always render at the top of every cell and take priority
+            // for slot allocation. Reserve a uniform height across the week so
+            // the schedule overlay below stays aligned horizontally. Cap at
+            // MAX_VISIBLE_PER_CELL so an absurdly busy day still leaves room
+            // for the "+N" indicator below.
+            const rawMaxEventsInWeek = cellHolidaysPerCell.reduce(
+              (m, list) => Math.max(m, list.length),
+              0,
+            );
+            const maxEventsInWeek = Math.min(rawMaxEventsInWeek, MAX_VISIBLE_PER_CELL);
+            const eventAreaHeight = maxEventsInWeek * ROW_PITCH;
+
+            // Lanes available to schedules after events have taken their slots.
+            const laneCapForWeek = Math.max(0, MAX_VISIBLE_PER_CELL - maxEventsInWeek);
+            const { visibleBars: bars, hiddenBars } = computeWeekBars(week, laneCapForWeek);
             const laneCount = bars.reduce((m, b) => Math.max(m, b.lane + 1), 0);
-            const laneAreaHeight = laneCount * (BAR_HEIGHT + BAR_GAP);
+            const laneAreaHeight = laneCount * ROW_PITCH;
 
             const perCellLaneHeight: number[] = week.map((_, cIdx) => {
               let maxLane = -1;
@@ -851,7 +877,7 @@ export default function CalendarPage() {
                   if (bar.lane > maxLane) maxLane = bar.lane;
                 }
               }
-              return maxLane === -1 ? 0 : (maxLane + 1) * (BAR_HEIGHT + BAR_GAP);
+              return maxLane === -1 ? 0 : (maxLane + 1) * ROW_PITCH;
             });
 
             // Number of schedule lanes occupying each cell (capped) and the count of
@@ -874,6 +900,7 @@ export default function CalendarPage() {
               <div
                 key={`week-${wIdx}`}
                 className="calendar-week-row"
+                style={{ ['--week-events-height' as string]: `${eventAreaHeight}px` }}
               >
                 {week.map((date, cIdx) => {
                   if (!date) {
@@ -897,19 +924,27 @@ export default function CalendarPage() {
                     return !hiddenFilters.has(filterId);
                   });
 
-                  // Combined display cap: schedules occupy lane slots first, tasks
-                  // fill the remainder, and any leftover items collapse into a
-                  // single "+N" indicator so cells stay readable.
+                  const cellHolidays = cellHolidaysPerCell[cIdx];
                   const lanesAtCell = perCellVisibleScheduleCount[cIdx];
                   const hiddenSchedulesAtCell = perCellHiddenScheduleCount[cIdx];
-                  const taskSlots = Math.max(0, MAX_VISIBLE_PER_CELL - lanesAtCell);
+
+                  // Priority: events > schedules > tasks. Events fill slots
+                  // first, schedules take the remainder (via week-level lane
+                  // assignment), and tasks fill whatever is left. Anything
+                  // beyond the cap collapses into a single "+N" indicator.
+                  const visibleEventCount = Math.min(cellHolidays.length, maxEventsInWeek);
+                  const hiddenEventCount = cellHolidays.length - visibleEventCount;
+                  const visibleEvents = cellHolidays.slice(0, visibleEventCount);
+                  const taskSlots = Math.max(
+                    0,
+                    MAX_VISIBLE_PER_CELL - visibleEventCount - lanesAtCell,
+                  );
                   const visibleTasks = tasks.slice(0, taskSlots);
                   const overflowCount =
-                    hiddenSchedulesAtCell + Math.max(0, tasks.length - visibleTasks.length);
+                    hiddenEventCount +
+                    hiddenSchedulesAtCell +
+                    Math.max(0, tasks.length - visibleTasks.length);
 
-                  const cellHolidays = (holidaysByDate.get(dateStr) || []).filter(
-                    h => !hiddenFilters.has(`__${h.type}`)
-                  );
                   const hasPublicHoliday = cellHolidays.some((h) => h.is_builtin || h.type === 'holiday');
 
                   return (
@@ -917,7 +952,10 @@ export default function CalendarPage() {
                       key={dateStr}
                       data-date={dateStr}
                       className={`calendar-cell ${isToday ? "today" : ""} ${cellData ? "has-data" : ""} ${isSunday || hasPublicHoliday ? "sunday" : ""} ${isSaturday ? "saturday" : ""} ${isDragging && dragStart && dragEnd && ((dragStart <= dragEnd && dateStr >= dragStart && dateStr <= dragEnd) || (dragStart > dragEnd && dateStr <= dragStart && dateStr >= dragEnd)) ? "selected" : ""}`}
-                      style={{ ['--cell-lane-height' as string]: `${perCellLaneHeight[cIdx]}px` }}
+                      style={{
+                        ['--cell-lane-height' as string]: `${perCellLaneHeight[cIdx]}px`,
+                        ['--cell-events-height' as string]: `${eventAreaHeight}px`,
+                      }}
                       onMouseDown={(e) => handleMouseDown(dateStr, e)}
                       onMouseEnter={() => handleMouseEnter(dateStr)}
                       onTouchStart={(e) => handleTouchStart(dateStr, e)}
@@ -925,21 +963,21 @@ export default function CalendarPage() {
                       onClick={() => handleCellClick(dateStr)}
                     >
                       <span className="calendar-cell-date">{date.getDate()}</span>
+                      {maxEventsInWeek > 0 && (
+                        <div className="calendar-cell-events">
+                          {visibleEvents.map((h, i) => (
+                            <div
+                              key={`${h.id}-${i}`}
+                              className={`calendar-holiday-item type-${h.type}`}
+                              style={h.color ? { color: h.color } : undefined}
+                              title={h.title}
+                            >
+                              {h.title}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div className="calendar-cell-body">
-                        {cellHolidays.length > 0 && (
-                          <div className="calendar-cell-holidays">
-                            {cellHolidays.map((h, i) => (
-                              <div
-                                key={`${h.id}-${i}`}
-                                className={`calendar-holiday-item type-${h.type}`}
-                                style={h.color ? { color: h.color } : undefined}
-                                title={h.title}
-                              >
-                                {h.title}
-                              </div>
-                            ))}
-                          </div>
-                        )}
                         {(visibleTasks.length > 0 || overflowCount > 0) && (
                           <div className="calendar-cell-tasks">
                             {visibleTasks.map((task) => {
