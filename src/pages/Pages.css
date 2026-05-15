@@ -1167,6 +1167,13 @@
   .page-content {
     padding-bottom: 120px;
   }
+
+  /* Calendar fills the viewport on mobile: .main-body already pads for the
+     mobile nav, so the extra .page-content padding would leave dead space
+     below the grid (which uses flex: 1). */
+  .calendar-page .page-content {
+    padding-bottom: 0;
+  }
 }
 
 @media (max-width: 767px) {
