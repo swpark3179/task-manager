@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useDayTasks } from '../hooks/useDayTasks';
 import MarkdownViewer from '../components/markdown/MarkdownViewer';
+import { getCurrentTauriWindow, isTauriRuntime } from '../lib/runtimeWindow';
 import type { Task } from '../types';
 import './DetailPage.css';
 
@@ -69,6 +70,14 @@ export default function DetailPage() {
   const save = async () => {
     await dayTasks.saveDescription(task.id, draft);
     setEditing(false);
+    if (isTauriRuntime()) {
+      try {
+        const win = await getCurrentTauriWindow();
+        await win?.close();
+      } catch (err) {
+        console.warn('Failed to close detail window after save:', err);
+      }
+    }
   };
 
   return (
