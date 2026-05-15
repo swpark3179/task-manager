@@ -11,9 +11,35 @@ import {
   createTaskSnapshot,
   deleteTaskSnapshot,
 } from '../lib/database';
-import { getTasksFromMemoryCacheSync } from '../lib/cache';
+import { getTasksFromMemoryCacheSync, invalidateMemoryCacheEntry } from '../lib/cache';
 import { useSyncStatus } from '../components/common/SyncIndicator';
 import type { Task } from '../types';
+
+// Cross-window task mutation channel. Tauri webviews share IndexedDB but each
+// keeps its own in-memory cache, so a save in the detail popup leaves the
+// dashboard's React state stale. We broadcast a notice and refresh in peers.
+const TASK_CHANNEL_NAME = 'task-manager:tasks';
+const SENDER_ID = (() => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+})();
+
+interface TaskMutationMessage {
+  type: 'tasks-mutated';
+  date: string;
+  senderId: string;
+}
+
+function getTaskChannel(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === 'undefined') return null;
+  try {
+    return new BroadcastChannel(TASK_CHANNEL_NAME);
+  } catch {
+    return null;
+  }
+}
 
 export interface UseDayTasksResult {
   tasks: Task[];
@@ -74,15 +100,50 @@ export function useDayTasks(date: string): UseDayTasksResult {
     }
   }, [refreshTasks, syncStatus]);
 
+  // Listen for mutations from sibling windows (e.g. detail popup saving while
+  // the dashboard is showing the same date) and re-pull from IndexedDB.
+  useEffect(() => {
+    const channel = getTaskChannel();
+    if (!channel) return;
+    const onMessage = (event: MessageEvent<TaskMutationMessage>) => {
+      const msg = event.data;
+      if (!msg || msg.type !== 'tasks-mutated') return;
+      if (msg.senderId === SENDER_ID) return;
+      if (msg.date !== date) return;
+      invalidateMemoryCacheEntry('tasks', date);
+      void refreshTasks();
+    };
+    channel.addEventListener('message', onMessage);
+    return () => {
+      channel.removeEventListener('message', onMessage);
+      channel.close();
+    };
+  }, [date, refreshTasks]);
+
   const mutate = useCallback(async (action: () => Promise<unknown>, errorMessage: string) => {
     try {
       await action();
       await refreshTasks();
       setLastMutationId((value) => value + 1);
+      const channel = getTaskChannel();
+      if (channel) {
+        try {
+          const message: TaskMutationMessage = {
+            type: 'tasks-mutated',
+            date,
+            senderId: SENDER_ID,
+          };
+          channel.postMessage(message);
+        } catch (broadcastErr) {
+          console.warn('Failed to broadcast task mutation:', broadcastErr);
+        } finally {
+          channel.close();
+        }
+      }
     } catch (err) {
       console.error(errorMessage, err);
     }
-  }, [refreshTasks]);
+  }, [date, refreshTasks]);
 
   const addTask = useCallback(async (title: string) => {
     await mutate(() => createTask({ title, created_date: date }), 'Failed to create task:');

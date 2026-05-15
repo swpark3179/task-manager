@@ -438,6 +438,13 @@ export function getTasksFromMemoryCacheSync(date: string): Task[] | null {
   return entry ? entry.data : null;
 }
 
+// Drop only the in-memory cache entry, leaving IndexedDB intact. Used when a
+// sibling window has written fresh data to IDB and we want the next read to
+// fall through to disk instead of returning this window's stale Map entry.
+export function invalidateMemoryCacheEntry(storeName: string, key: string): void {
+  memoryCache.delete(`${storeName}:${key}`);
+}
+
 export async function clearAllCaches(): Promise<void> {
   try {
     const db = await getDB();
