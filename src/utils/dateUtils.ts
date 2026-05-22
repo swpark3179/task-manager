@@ -82,6 +82,37 @@ export function getMonthCalendarGrid(year: number, month: number): (Date | null)
   return grid;
 }
 
+export type CalendarCell = { date: Date; isCurrentMonth: boolean };
+
+// 달력 그리드를 항상 6주(42칸)로 채워 반환합니다. 이번 달 1일 앞에는
+// 전달의 마지막 며칠을, 마지막 날 뒤에는 다음 달의 며칠을 채워서
+// 모든 셀이 실제 날짜를 가지도록 합니다. 인접 달 셀은 isCurrentMonth=false 입니다.
+export function getMonthCalendarCells(year: number, month: number): CalendarCell[] {
+  const days = getMonthDays(year, month);
+  const firstDayOfWeek = getDay(days[0]); // 0=Sun
+  const cells: CalendarCell[] = [];
+
+  // Leading days from the previous month
+  for (let i = firstDayOfWeek; i > 0; i--) {
+    cells.push({ date: subDays(days[0], i), isCurrentMonth: false });
+  }
+
+  // Current month days
+  for (const d of days) {
+    cells.push({ date: d, isCurrentMonth: true });
+  }
+
+  // Trailing days from the next month, always pad to 42 cells (6 weeks)
+  const lastDay = days[days.length - 1];
+  let offset = 1;
+  while (cells.length < 42) {
+    cells.push({ date: addDays(lastDay, offset), isCurrentMonth: false });
+    offset++;
+  }
+
+  return cells;
+}
+
 export function getYearMonth(date: string): string {
   return date.substring(0, 7); // YYYY-MM
 }
