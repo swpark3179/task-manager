@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { useSwipe } from '../hooks/useSwipe';
 import { useRubberBandScroll } from '../hooks/useRubberBandScroll';
 import {
   fetchCalendarData,
@@ -9,11 +8,12 @@ import {
 } from "../lib/database";
 import { getKoreanHolidaysForYear } from "../utils/koreanHolidays";
 import {
-  getMonthCalendarGrid,
+  getMonthCalendarCells,
   formatDate,
   formatMonthYear,
   getTodayString,
 } from "../utils/dateUtils";
+import type { CalendarCell } from "../utils/dateUtils";
 import type { CalendarCellData, Category, Schedule, Holiday } from "../types";
 import { getCalendarFromMemoryCacheSync } from "../lib/cache";
 import ScheduleModal from "../components/schedules/ScheduleModal";
@@ -95,12 +95,29 @@ export default function CalendarPage() {
   const dayModalDragStartYRef = useRef<number | null>(null);
   const dayModalDragOffsetRef = useRef(0);
   const suppressDayModalTitleClickRef = useRef(false);
-  const calendarGridRef = useRef<HTMLDivElement>(null);
   const previousSyncStatusRef = useRef(syncStatus);
 
-  // 월 전환 슬라이드 애니메이션
-  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
-  const [animKey, setAnimKey] = useState(0);
+  // 월 전환 슬라이드 & 손가락 드래그 상태.
+  // dragOffsetPx: 손가락 이동량(px). 드래그/스냅/커밋 단계 모두 사용.
+  // commitPhase: 'idle' = 일반 상태 또는 드래그 중,
+  //   'prev'/'next' = 인접 달로 슬라이드 완료 후 월 전환 예정,
+  //   'snap' = 임계치 미만으로 원위치 복귀,
+  //   'button-prev'/'button-next' = 버튼/피커로 인접 달로 슬라이드.
+  type CommitPhase = 'idle' | 'prev' | 'next' | 'snap' | 'button-prev' | 'button-next';
+  const [dragOffsetPx, setDragOffsetPx] = useState(0);
+  const [commitPhase, setCommitPhase] = useState<CommitPhase>('idle');
+  const [isDragActive, setIsDragActive] = useState(false);
+  const stripViewportRef = useRef<HTMLDivElement>(null);
+  const stripTouchRef = useRef<{
+    startX: number;
+    startY: number;
+    decided: boolean;
+    horizontal: boolean;
+  } | null>(null);
+  // Set when a horizontal swipe just ended so the synthetic click that some
+  // browsers still dispatch after a short touch-drag doesn't open the day
+  // modal for the cell the finger started on.
+  const suppressNextCellClickRef = useRef(false);
 
   // 년/월 선택 피커
   const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
@@ -204,25 +221,33 @@ export default function CalendarPage() {
   const clearFilters = () => setHiddenFilters(new Set());
 
   const loadCalendarData = useCallback(async (cancelledRef?: { current: boolean }) => {
+    const prevY = month === 1 ? year - 1 : year;
+    const prevM = month === 1 ? 12 : month - 1;
+    const nextY = month === 12 ? year + 1 : year;
+    const nextM = month === 12 ? 1 : month + 1;
+
     const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
     const memoryHit = getCalendarFromMemoryCacheSync(yearMonth);
 
-    // 메모리 캐시 히트 시: 스피너 없이 즉시 반영
+    // 메모리 캐시 히트 시: 일단 현재 달만 즉시 반영(스피너 깜빡임 방지)
     if (memoryHit) {
       if (!cancelledRef?.current) {
         setCalendarData(memoryHit);
         setLoading(false);
       }
-      return;
+    } else {
+      setLoading(true);
     }
 
-    setLoading(true);
     try {
-      const data = await fetchCalendarData(year, month, (fresh) => {
-        // Stale-while-revalidate: update once the background refresh resolves
-        if (!cancelledRef?.current) setCalendarData(fresh);
-      });
-      if (!cancelledRef?.current) setCalendarData(data);
+      const [curr, prev, next] = await Promise.all([
+        fetchCalendarData(year, month),
+        fetchCalendarData(prevY, prevM),
+        fetchCalendarData(nextY, nextM),
+      ]);
+      if (!cancelledRef?.current) {
+        setCalendarData([...prev, ...curr, ...next]);
+      }
     } catch (err) {
       console.error("Failed to load calendar data:", err);
     } finally {
@@ -293,52 +318,38 @@ export default function CalendarPage() {
     };
   }, [isDragging, dragStart, dragEnd]);
 
-  const grid = getMonthCalendarGrid(year, month);
+  const prevYear = month === 1 ? year - 1 : year;
+  const prevMonthNum = month === 1 ? 12 : month - 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonthNum = month === 12 ? 1 : month + 1;
 
-  const weeks = useMemo(() => {
-    const out: (Date | null)[][] = [];
-    for (let i = 0; i < grid.length; i += 7) {
-      out.push(grid.slice(i, i + 7));
+  const buildWeeks = useCallback((y: number, m: number) => {
+    const cells = getMonthCalendarCells(y, m);
+    const out: CalendarCell[][] = [];
+    for (let i = 0; i < cells.length; i += 7) {
+      out.push(cells.slice(i, i + 7));
     }
     return out;
-  }, [grid]);
+  }, []);
+
+  const prevWeeks = useMemo(() => buildWeeks(prevYear, prevMonthNum), [buildWeeks, prevYear, prevMonthNum]);
+  const currWeeks = useMemo(() => buildWeeks(year, month), [buildWeeks, year, month]);
+  const nextWeeks = useMemo(() => buildWeeks(nextYear, nextMonthNum), [buildWeeks, nextYear, nextMonthNum]);
 
   const dayLabels = ["일", "월", "화", "수", "목", "금", "토"];
 
   const prevMonth = () => {
-    setSlideDirection('left');
-    setAnimKey((k) => k + 1);
-    if (month === 1) {
-      setYear((y) => y - 1);
-      setMonth(12);
-    } else setMonth((m) => m - 1);
+    if (commitPhase !== 'idle') return;
+    setCommitPhase('button-prev');
   };
 
   const nextMonth = () => {
-    setSlideDirection('right');
-    setAnimKey((k) => k + 1);
-    if (month === 12) {
-      setYear((y) => y + 1);
-      setMonth(1);
-    } else setMonth((m) => m + 1);
+    if (commitPhase !== 'idle') return;
+    setCommitPhase('button-next');
   };
-
-  const swipeHandlers = useSwipe({
-    onSwipedLeft: nextMonth,
-    onSwipedRight: prevMonth,
-    minSwipeDistance: 110,
-    horizontalRatio: 1.2,
-  });
 
   const goToToday = () => {
     const now = new Date();
-    const isSameMonth = now.getFullYear() === year && now.getMonth() + 1 === month;
-    if (!isSameMonth) {
-      const goingForward =
-        now.getFullYear() > year || (now.getFullYear() === year && now.getMonth() + 1 > month);
-      setSlideDirection(goingForward ? 'right' : 'left');
-      setAnimKey((k) => k + 1);
-    }
     setYear(now.getFullYear());
     setMonth(now.getMonth() + 1);
   };
@@ -349,10 +360,6 @@ export default function CalendarPage() {
       setShowYearMonthPicker(false);
       return;
     }
-    const goingForward =
-      targetYear > year || (targetYear === year && targetMonth > month);
-    setSlideDirection(goingForward ? 'right' : 'left');
-    setAnimKey((k) => k + 1);
     setYear(targetYear);
     setMonth(targetMonth);
     setShowYearMonthPicker(false);
@@ -372,11 +379,10 @@ export default function CalendarPage() {
   // placed bars and (b) >= the event count of every cell it spans, so that
   // bars never visually overlap events. Bars whose lane reaches MAX_VISIBLE_PER_CELL
   // are collapsed into the per-cell "+N" overflow indicator.
-  const computeWeekBars = (week: (Date | null)[], perCellEventCount: number[]): WeekBarsResult => {
+  const computeWeekBars = (week: CalendarCell[], perCellEventCount: number[]): WeekBarsResult => {
     const scheduleMap = new Map<string, Schedule>();
-    for (const d of week) {
-      if (!d) continue;
-      const ds = formatDate(d);
+    for (const { date } of week) {
+      const ds = formatDate(date);
       const cell = getCellData(ds);
       cell?.schedules?.forEach((s) => {
         const filterId = s.category_id ?? '__no_category';
@@ -391,9 +397,8 @@ export default function CalendarPage() {
       const eStr = schedule.end_date.split("T")[0];
       let startCol = -1;
       let endCol = -1;
-      week.forEach((d, idx) => {
-        if (!d) return;
-        const ds = formatDate(d);
+      week.forEach(({ date }, idx) => {
+        const ds = formatDate(date);
         if (ds >= sStr && ds <= eStr) {
           if (startCol === -1) startCol = idx;
           endCol = idx;
@@ -404,8 +409,8 @@ export default function CalendarPage() {
         schedule,
         startCol,
         endCol,
-        isActualStart: formatDate(week[startCol]!) === sStr,
-        isActualEnd: formatDate(week[endCol]!) === eStr,
+        isActualStart: formatDate(week[startCol].date) === sStr,
+        isActualEnd: formatDate(week[endCol].date) === eStr,
       });
     }
 
@@ -537,8 +542,8 @@ export default function CalendarPage() {
       e.preventDefault();
 
       // Find which cell we are currently hovering over
-      if (calendarGridRef.current) {
-        const cells = calendarGridRef.current.querySelectorAll('.calendar-cell[data-date]');
+      if (stripViewportRef.current) {
+        const cells = stripViewportRef.current.querySelectorAll('.calendar-cell[data-date]');
         for (const cell of Array.from(cells)) {
           const rect = cell.getBoundingClientRect();
           if (
@@ -592,6 +597,10 @@ export default function CalendarPage() {
   };
 
   const handleCellClick = (dateStr: string) => {
+    if (suppressNextCellClickRef.current) {
+      suppressNextCellClickRef.current = false;
+      return;
+    }
     setDragStart(null);
     setDragEnd(null);
     setSelectedDate(dateStr);
@@ -679,8 +688,324 @@ export default function CalendarPage() {
     if (shouldClose) closeDayModal();
   };
 
+  // === Calendar strip swipe (real-time finger-tracked drag with peek) ===
+  // 손가락이 닿은 채 좌우로 움직이면 달력 strip이 그만큼 따라 움직이며,
+  // 임계치를 넘은 채 손가락을 떼면 인접 달로 전환, 그렇지 않으면 원위치 스냅.
+  const SWIPE_HORIZONTAL_BIAS = 1.2;
+  const SWIPE_COMMIT_RATIO = 0.22;
+
+  // Native (non-passive) touch handlers for the strip so we can preventDefault
+  // once a horizontal drag is detected. React's synthetic touch listeners are
+  // attached passively in modern React, which makes e.preventDefault() inside
+  // them a no-op for scroll suppression.
+  useEffect(() => {
+    const el = stripViewportRef.current;
+    if (!el) return;
+
+    const onTouchStartNative = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      if (commitPhase !== 'idle') return;
+      stripTouchRef.current = {
+        startX: e.touches[0].clientX,
+        startY: e.touches[0].clientY,
+        decided: false,
+        horizontal: false,
+      };
+    };
+
+    const onTouchMoveNative = (e: TouchEvent) => {
+      const state = stripTouchRef.current;
+      if (!state) return;
+      // While long-press cell selection is active, leave swipe alone.
+      if (isLongPressTriggeredRef.current) return;
+      const t = e.touches[0];
+      const dx = t.clientX - state.startX;
+      const dy = t.clientY - state.startY;
+
+      if (!state.decided) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        state.decided = true;
+        state.horizontal = Math.abs(dx) > Math.abs(dy) * SWIPE_HORIZONTAL_BIAS;
+        if (state.horizontal) {
+          setIsDragActive(true);
+          // Cancel any pending long-press timer started by a cell touchstart so
+          // the swipe doesn't accidentally trigger drag selection mid-swipe.
+          if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+          }
+        }
+      }
+
+      if (state.horizontal) {
+        e.preventDefault();
+        setDragOffsetPx(dx);
+      }
+    };
+
+    el.addEventListener('touchstart', onTouchStartNative, { passive: true });
+    el.addEventListener('touchmove', onTouchMoveNative, { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStartNative);
+      el.removeEventListener('touchmove', onTouchMoveNative);
+    };
+  }, [commitPhase]);
+
+  const handleStripTouchStart = (_e: React.TouchEvent) => {
+    // No-op: native handler above sets up state. Kept here to ensure React
+    // doesn't synthesize a passive listener that ignores our preventDefault.
+  };
+
+  const handleStripTouchEnd = () => {
+    const state = stripTouchRef.current;
+    if (!state) return;
+    stripTouchRef.current = null;
+    if (!state.horizontal) {
+      setIsDragActive(false);
+      return;
+    }
+    suppressNextCellClickRef.current = true;
+    // Clear the suppress flag after the synthesized click would have fired
+    // so a later, genuine tap isn't mistakenly swallowed.
+    setTimeout(() => { suppressNextCellClickRef.current = false; }, 350);
+    const w = stripViewportRef.current?.clientWidth || window.innerWidth || 1;
+    const threshold = w * SWIPE_COMMIT_RATIO;
+    const dx = dragOffsetPx;
+    setIsDragActive(false);
+    if (dx > threshold) {
+      setCommitPhase('prev');
+    } else if (dx < -threshold) {
+      setCommitPhase('next');
+    } else {
+      setCommitPhase('snap');
+    }
+  };
+
+  const handleStripTransitionEnd = (e: React.TransitionEvent<HTMLDivElement>) => {
+    if (e.propertyName !== 'transform') return;
+    if (commitPhase === 'idle') return;
+    if (commitPhase === 'prev' || commitPhase === 'button-prev') {
+      if (month === 1) {
+        setYear((y) => y - 1);
+        setMonth(12);
+      } else {
+        setMonth((m) => m - 1);
+      }
+    } else if (commitPhase === 'next' || commitPhase === 'button-next') {
+      if (month === 12) {
+        setYear((y) => y + 1);
+        setMonth(1);
+      } else {
+        setMonth((m) => m + 1);
+      }
+    }
+    // For 'snap' (or any other phase): no month change, just return to idle.
+    setCommitPhase('idle');
+    setDragOffsetPx(0);
+  };
+
+  const renderMonthGrid = (
+    _gridYear: number,
+    gridMonth: number,
+    weeks: CalendarCell[][],
+  ) => (
+    <div className="calendar-grid">
+      {weeks.map((week, wIdx) => {
+        const cellHolidaysPerCell = week.map(({ date }) => {
+          const ds = formatDate(date);
+          return (holidaysByDate.get(ds) || []).filter(
+            (h) => !hiddenFilters.has(`__${h.type}`),
+          );
+        });
+
+        const perCellEventCount: number[] = cellHolidaysPerCell.map(
+          (list) => Math.min(list.length, MAX_VISIBLE_PER_CELL),
+        );
+
+        const { visibleBars: bars, hiddenBars } = computeWeekBars(week, perCellEventCount);
+
+        const globalMaxAbsLane = bars.reduce((m, b) => Math.max(m, b.lane), -1);
+        const laneAreaHeight = globalMaxAbsLane >= 0 ? (globalMaxAbsLane + 1) * ROW_PITCH : 0;
+
+        const perCellLaneHeight: number[] = week.map((_, cIdx) => {
+          let maxAbsLane = -1;
+          for (const bar of bars) {
+            if (cIdx >= bar.startCol && cIdx <= bar.endCol) {
+              if (bar.lane > maxAbsLane) maxAbsLane = bar.lane;
+            }
+          }
+          if (maxAbsLane === -1) return 0;
+          return Math.max(0, (maxAbsLane + 1) - perCellEventCount[cIdx]) * ROW_PITCH;
+        });
+
+        const perCellVisibleScheduleCount: number[] = week.map((_, cIdx) =>
+          bars.reduce(
+            (n, b) => (cIdx >= b.startCol && cIdx <= b.endCol ? n + 1 : n),
+            0,
+          ),
+        );
+        const perCellHiddenScheduleCount: number[] = week.map((_, cIdx) =>
+          hiddenBars.reduce(
+            (n, b) => (cIdx >= b.startCol && cIdx <= b.endCol ? n + 1 : n),
+            0,
+          ),
+        );
+
+        return (
+          <div key={`week-${wIdx}`} className="calendar-week-row">
+            {week.map(({ date, isCurrentMonth }, cIdx) => {
+              const dateStr = formatDate(date);
+              const cellData = getCellData(dateStr);
+              const isToday = dateStr === today;
+              const dayOfWeek = date.getDay();
+              const isSunday = dayOfWeek === 0;
+              const isSaturday = dayOfWeek === 6;
+              const tasks = (cellData?.tasks || []).filter((t) => {
+                if (t.is_snapshot) return false;
+                const filterId = t.category_id ?? '__no_category';
+                return !hiddenFilters.has(filterId);
+              });
+
+              const cellHolidays = cellHolidaysPerCell[cIdx];
+              const lanesAtCell = perCellVisibleScheduleCount[cIdx];
+              const hiddenSchedulesAtCell = perCellHiddenScheduleCount[cIdx];
+
+              const visibleEventCount = perCellEventCount[cIdx];
+              const hiddenEventCount = cellHolidays.length - visibleEventCount;
+              const visibleEvents = cellHolidays.slice(0, visibleEventCount);
+              const taskSlots = Math.max(
+                0,
+                MAX_VISIBLE_PER_CELL - visibleEventCount - lanesAtCell,
+              );
+              const visibleTasks = tasks.slice(0, taskSlots);
+              const overflowCount =
+                hiddenEventCount +
+                hiddenSchedulesAtCell +
+                Math.max(0, tasks.length - visibleTasks.length);
+
+              const hasPublicHoliday = cellHolidays.some((h) => h.is_builtin || h.type === 'holiday');
+
+              return (
+                <div
+                  key={`${gridMonth}-${dateStr}`}
+                  data-date={dateStr}
+                  className={`calendar-cell ${isCurrentMonth ? '' : 'outside-month'} ${isToday ? 'today' : ''} ${cellData ? 'has-data' : ''} ${isSunday || hasPublicHoliday ? 'sunday' : ''} ${isSaturday ? 'saturday' : ''} ${isDragging && dragStart && dragEnd && ((dragStart <= dragEnd && dateStr >= dragStart && dateStr <= dragEnd) || (dragStart > dragEnd && dateStr <= dragStart && dateStr >= dragEnd)) ? 'selected' : ''}`}
+                  style={{
+                    ['--cell-lane-height' as string]: `${perCellLaneHeight[cIdx]}px`,
+                    ['--cell-events-height' as string]: `${visibleEventCount * ROW_PITCH}px`,
+                  }}
+                  onMouseDown={(e) => handleMouseDown(dateStr, e)}
+                  onMouseEnter={() => handleMouseEnter(dateStr)}
+                  onTouchStart={(e) => handleTouchStart(dateStr, e)}
+                  onTouchEnd={(e) => handleTouchEnd(dateStr, e)}
+                  onClick={() => handleCellClick(dateStr)}
+                >
+                  <span className="calendar-cell-date">{date.getDate()}</span>
+                  {visibleEventCount > 0 && (
+                    <div className="calendar-cell-events">
+                      {visibleEvents.map((h, i) => (
+                        <div
+                          key={`${h.id}-${i}`}
+                          className={`calendar-holiday-item type-${h.type}`}
+                          style={h.color ? { color: h.color } : undefined}
+                          title={h.title}
+                        >
+                          {h.title}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="calendar-cell-body">
+                    {(visibleTasks.length > 0 || overflowCount > 0) && (
+                      <div className="calendar-cell-tasks">
+                        {visibleTasks.map((task) => {
+                          const catColor = getCategoryColor(task.category_id);
+                          return (
+                            <div
+                              key={task.id}
+                              className={`calendar-task-item ${task.status}`}
+                              style={
+                                catColor
+                                  ? { borderLeft: `3px solid ${catColor}` }
+                                  : undefined
+                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCellClick(dateStr);
+                              }}
+                            >
+                              <span className="calendar-task-title">
+                                {task.title ? task.title : '제목 없음'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {overflowCount > 0 && (
+                          <div
+                            className="calendar-task-more"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCellClick(dateStr);
+                            }}
+                          >
+                            +{overflowCount}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {bars.length > 0 && (
+              <div
+                className="schedule-lane-overlay"
+                style={{ height: `${laneAreaHeight}px` }}
+              >
+                {bars.map((bar) => {
+                  const continuesLeft = !bar.isActualStart;
+                  const continuesRight = !bar.isActualEnd;
+                  const showTitle = bar.isActualStart || bar.startCol === 0;
+                  const catColor = getCategoryColor(bar.schedule.category_id);
+                  return (
+                    <div
+                      key={`${bar.schedule.id}-w${gridMonth}-${wIdx}`}
+                      className={`schedule-bar ${continuesLeft ? 'continues-left' : ''} ${continuesRight ? 'continues-right' : ''}`}
+                      style={{
+                        gridColumn: `${bar.startCol + 1} / ${bar.endCol + 2}`,
+                        gridRow: bar.lane + 1,
+                        ...(catColor ? { background: catColor, color: getContrastColor(catColor) } : undefined),
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openScheduleBar(bar.schedule);
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      title={bar.schedule.title}
+                    >
+                      <span className="schedule-bar-title">
+                        {showTitle ? bar.schedule.title : ' '}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
-    <div className="page calendar-page" {...swipeHandlers}>
+    <div
+      className="page calendar-page"
+      onMouseUp={handleMouseUp}
+      onMouseLeave={() => { if (isDragging) handleMouseUp(); }}
+      onTouchMove={handleTouchMove}
+    >
       <div className="page-content">
         <div className="calendar-nav">
           <button className="calendar-nav-btn" onClick={prevMonth} aria-label="이전 달">
@@ -843,230 +1168,37 @@ export default function CalendarPage() {
         </div>
 
         <div
-          ref={calendarGridRef}
-          key={animKey}
-          className={`calendar-grid ${slideDirection === 'right' ? 'slide-enter-right' : ''} ${slideDirection === 'left' ? 'slide-enter-left' : ''}`}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={() => { if (isDragging) handleMouseUp(); }}
-          onTouchMove={handleTouchMove}
-          onAnimationEnd={() => setSlideDirection(null)}
+          ref={stripViewportRef}
+          className="calendar-strip-viewport"
+          onTouchStart={handleStripTouchStart}
+          onTouchEnd={handleStripTouchEnd}
+          onTouchCancel={handleStripTouchEnd}
         >
-          {weeks.map((week, wIdx) => {
-            // Per-cell event lists (filtered by the active category/type filters).
-            const cellHolidaysPerCell = week.map((date) => {
-              if (!date) return [] as Holiday[];
-              const ds = formatDate(date);
-              return (holidaysByDate.get(ds) || []).filter(
-                (h) => !hiddenFilters.has(`__${h.type}`),
-              );
-            });
-
-            // Per-cell event counts (capped at MAX_VISIBLE_PER_CELL). Used to
-            // determine the minimum lane a schedule bar may occupy in each cell,
-            // allowing bars in event-free cells to start at lane 0 even when
-            // other cells in the same week row have events.
-            const perCellEventCount: number[] = cellHolidaysPerCell.map(
-              (list) => Math.min(list.length, MAX_VISIBLE_PER_CELL),
-            );
-
-            const { visibleBars: bars, hiddenBars } = computeWeekBars(week, perCellEventCount);
-
-            // Height of the overlay spans all absolute lanes actually used.
-            const globalMaxAbsLane = bars.reduce((m, b) => Math.max(m, b.lane), -1);
-            const laneAreaHeight = globalMaxAbsLane >= 0 ? (globalMaxAbsLane + 1) * ROW_PITCH : 0;
-
-            // Per-cell: extra margin the cell body needs BEYOND the event area
-            // so tasks start below the lowest schedule bar in that cell.
-            const perCellLaneHeight: number[] = week.map((_, cIdx) => {
-              let maxAbsLane = -1;
-              for (const bar of bars) {
-                if (cIdx >= bar.startCol && cIdx <= bar.endCol) {
-                  if (bar.lane > maxAbsLane) maxAbsLane = bar.lane;
-                }
-              }
-              if (maxAbsLane === -1) return 0;
-              return Math.max(0, (maxAbsLane + 1) - perCellEventCount[cIdx]) * ROW_PITCH;
-            });
-
-            // Number of schedule lanes occupying each cell (capped) and the count of
-            // schedules that pass through each cell but were dropped because they
-            // exceeded the lane cap.
-            const perCellVisibleScheduleCount: number[] = week.map((_, cIdx) =>
-              bars.reduce(
-                (n, b) => (cIdx >= b.startCol && cIdx <= b.endCol ? n + 1 : n),
-                0,
-              ),
-            );
-            const perCellHiddenScheduleCount: number[] = week.map((_, cIdx) =>
-              hiddenBars.reduce(
-                (n, b) => (cIdx >= b.startCol && cIdx <= b.endCol ? n + 1 : n),
-                0,
-              ),
-            );
-
-            return (
-              <div
-                key={`week-${wIdx}`}
-                className="calendar-week-row"
-              >
-                {week.map((date, cIdx) => {
-                  if (!date) {
-                    return (
-                      <div
-                        key={`empty-${wIdx}-${cIdx}`}
-                        className="calendar-cell empty"
-                      />
-                    );
-                  }
-
-                  const dateStr = formatDate(date);
-                  const cellData = getCellData(dateStr);
-                  const isToday = dateStr === today;
-                  const dayOfWeek = date.getDay();
-                  const isSunday = dayOfWeek === 0;
-                  const isSaturday = dayOfWeek === 6;
-                  const tasks = (cellData?.tasks || []).filter(t => {
-                    if (t.is_snapshot) return false;
-                    const filterId = t.category_id ?? '__no_category';
-                    return !hiddenFilters.has(filterId);
-                  });
-
-                  const cellHolidays = cellHolidaysPerCell[cIdx];
-                  const lanesAtCell = perCellVisibleScheduleCount[cIdx];
-                  const hiddenSchedulesAtCell = perCellHiddenScheduleCount[cIdx];
-
-                  // Priority: events > schedules > tasks. Events fill slots
-                  // first; schedule bars are placed in lanes >= this cell's
-                  // event count, so they never overlap events. Tasks fill
-                  // whatever per-cell budget remains.
-                  const visibleEventCount = perCellEventCount[cIdx];
-                  const hiddenEventCount = cellHolidays.length - visibleEventCount;
-                  const visibleEvents = cellHolidays.slice(0, visibleEventCount);
-                  const taskSlots = Math.max(
-                    0,
-                    MAX_VISIBLE_PER_CELL - visibleEventCount - lanesAtCell,
-                  );
-                  const visibleTasks = tasks.slice(0, taskSlots);
-                  const overflowCount =
-                    hiddenEventCount +
-                    hiddenSchedulesAtCell +
-                    Math.max(0, tasks.length - visibleTasks.length);
-
-                  const hasPublicHoliday = cellHolidays.some((h) => h.is_builtin || h.type === 'holiday');
-
-                  return (
-                    <div
-                      key={dateStr}
-                      data-date={dateStr}
-                      className={`calendar-cell ${isToday ? "today" : ""} ${cellData ? "has-data" : ""} ${isSunday || hasPublicHoliday ? "sunday" : ""} ${isSaturday ? "saturday" : ""} ${isDragging && dragStart && dragEnd && ((dragStart <= dragEnd && dateStr >= dragStart && dateStr <= dragEnd) || (dragStart > dragEnd && dateStr <= dragStart && dateStr >= dragEnd)) ? "selected" : ""}`}
-                      style={{
-                        ['--cell-lane-height' as string]: `${perCellLaneHeight[cIdx]}px`,
-                        ['--cell-events-height' as string]: `${visibleEventCount * ROW_PITCH}px`,
-                      }}
-                      onMouseDown={(e) => handleMouseDown(dateStr, e)}
-                      onMouseEnter={() => handleMouseEnter(dateStr)}
-                      onTouchStart={(e) => handleTouchStart(dateStr, e)}
-                      onTouchEnd={(e) => handleTouchEnd(dateStr, e)}
-                      onClick={() => handleCellClick(dateStr)}
-                    >
-                      <span className="calendar-cell-date">{date.getDate()}</span>
-                      {visibleEventCount > 0 && (
-                        <div className="calendar-cell-events">
-                          {visibleEvents.map((h, i) => (
-                            <div
-                              key={`${h.id}-${i}`}
-                              className={`calendar-holiday-item type-${h.type}`}
-                              style={h.color ? { color: h.color } : undefined}
-                              title={h.title}
-                            >
-                              {h.title}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <div className="calendar-cell-body">
-                        {(visibleTasks.length > 0 || overflowCount > 0) && (
-                          <div className="calendar-cell-tasks">
-                            {visibleTasks.map((task) => {
-                              const catColor = getCategoryColor(task.category_id);
-                              return (
-                                <div
-                                  key={task.id}
-                                  className={`calendar-task-item ${task.status}`}
-                                  style={
-                                    catColor
-                                      ? { borderLeft: `3px solid ${catColor}` }
-                                      : undefined
-                                  }
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleCellClick(dateStr);
-                                  }}
-                                >
-                                  <span className="calendar-task-title">
-                                    {task.title ? task.title : "제목 없음"}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                            {overflowCount > 0 && (
-                              <div
-                                className="calendar-task-more"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleCellClick(dateStr);
-                                }}
-                              >
-                                +{overflowCount}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {bars.length > 0 && (
-                  <div
-                    className="schedule-lane-overlay"
-                    style={{ height: `${laneAreaHeight}px` }}
-                  >
-                    {bars.map((bar) => {
-                      const continuesLeft = !bar.isActualStart;
-                      const continuesRight = !bar.isActualEnd;
-                      const showTitle = bar.isActualStart || bar.startCol === 0;
-                      const catColor = getCategoryColor(bar.schedule.category_id);
-                      return (
-                        <div
-                          key={`${bar.schedule.id}-w${wIdx}`}
-                          className={`schedule-bar ${continuesLeft ? "continues-left" : ""} ${continuesRight ? "continues-right" : ""}`}
-                          style={{
-                            gridColumn: `${bar.startCol + 1} / ${bar.endCol + 2}`,
-                            gridRow: bar.lane + 1,
-                            ...(catColor ? { background: catColor, color: getContrastColor(catColor) } : undefined),
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openScheduleBar(bar.schedule);
-                          }}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          title={bar.schedule.title}
-                        >
-                          <span className="schedule-bar-title">
-                            {showTitle ? bar.schedule.title : "\u00A0"}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          <div
+            className={`calendar-strip ${commitPhase !== 'idle' ? 'transitioning' : ''} ${isDragActive ? 'is-dragging' : ''}`}
+            style={{
+              transform:
+                commitPhase === 'idle'
+                  ? `translate3d(calc(-33.3333% + ${dragOffsetPx}px), 0, 0)`
+                  : commitPhase === 'prev' || commitPhase === 'button-prev'
+                  ? 'translate3d(0%, 0, 0)'
+                  : commitPhase === 'next' || commitPhase === 'button-next'
+                  ? 'translate3d(-66.6667%, 0, 0)'
+                  : 'translate3d(-33.3333%, 0, 0)',
+            }}
+            onTransitionEnd={handleStripTransitionEnd}
+          >
+            <div className="calendar-strip-slot">
+              {renderMonthGrid(prevYear, prevMonthNum, prevWeeks)}
+            </div>
+            <div className="calendar-strip-slot">
+              {renderMonthGrid(year, month, currWeeks)}
+            </div>
+            <div className="calendar-strip-slot">
+              {renderMonthGrid(nextYear, nextMonthNum, nextWeeks)}
+            </div>
+          </div>
         </div>
-
 
         {showScheduleModal && scheduleModalRange && (
           <ScheduleModal
@@ -1081,8 +1213,7 @@ export default function CalendarPage() {
               setSelectedSchedule(null);
             }}
             onSave={async () => {
-              const freshData = await fetchCalendarData(year, month);
-              setCalendarData(freshData);
+              await loadCalendarData();
               setShowScheduleModal(false);
               setScheduleModalRange(null);
               setDragStart(null);

@@ -377,6 +377,21 @@
   color: var(--nord4);
 }
 
+/* Adjacent-month cells filling the leading/trailing slots so the grid is never
+   visually empty. Content is rendered as usual but at reduced opacity so the
+   current month remains the visual focus. */
+.calendar-cell.outside-month {
+  background: var(--bg-primary);
+}
+.calendar-cell.outside-month .calendar-cell-date,
+.calendar-cell.outside-month .calendar-cell-body,
+.calendar-cell.outside-month .calendar-cell-events {
+  opacity: 0.42;
+}
+.calendar-cell.outside-month.today .calendar-cell-date {
+  opacity: 0.6;
+}
+
 .calendar-cell.selected {
   background: var(--accent-light);
 }
@@ -1580,23 +1595,54 @@
   font-size: 0.8125rem;
 }
 
-/* === Calendar month slide animation === */
-.calendar-grid {
-  will-change: transform, opacity;
+/* === Calendar month strip (real-time swipe with prev/next peek) === */
+.calendar-strip-viewport {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  /* Block the browser from claiming horizontal pan gestures so our finger-tracked
+     drag can take over without fighting native scrolling. Vertical pans still
+     pass through normally. */
+  touch-action: pan-y;
 }
-.calendar-grid.slide-enter-left {
-  animation: slideInFromLeft 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+
+.calendar-strip {
+  display: flex;
+  flex-direction: row;
+  width: 300%;
+  flex: 1;
+  min-height: 0;
+  will-change: transform;
+  transform: translate3d(-33.3333%, 0, 0);
 }
-.calendar-grid.slide-enter-right {
-  animation: slideInFromRight 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+
+.calendar-strip.transitioning {
+  transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
-@keyframes slideInFromLeft {
-  from { transform: translateX(-24%); opacity: 0; }
-  to   { transform: translateX(0);    opacity: 1; }
+
+.calendar-strip-slot {
+  flex: 0 0 33.3333%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
-@keyframes slideInFromRight {
-  from { transform: translateX(24%); opacity: 0; }
-  to   { transform: translateX(0);   opacity: 1; }
+
+/* Strip-mode grids share the viewport's border/radius, so individual grids
+   should not draw their own outer chrome — they'd otherwise stack visually
+   during a peek/drag. */
+.calendar-strip-slot > .calendar-grid {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 @keyframes slideUpSheet {

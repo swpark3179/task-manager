@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { getMonthCalendarGrid } from "../dateUtils";
+import { getMonthCalendarGrid, getMonthCalendarCells } from "../dateUtils";
 
 describe("getMonthCalendarGrid", () => {
   it("should generate a correct grid for a standard month (e.g., February 2024 - leap year)", () => {
@@ -78,5 +78,57 @@ describe("getMonthCalendarGrid", () => {
 
     // Check that there are no nulls at all in this specific case
     expect(grid.includes(null)).toBe(false);
+  });
+});
+
+describe("getMonthCalendarCells", () => {
+  it("fills the leading slots with previous-month days", () => {
+    // Feb 2024 starts on a Thursday (weekday 4) — so 4 leading cells from Jan.
+    const cells = getMonthCalendarCells(2024, 2);
+    expect(cells.length).toBe(42); // Always 6 weeks.
+
+    // Leading: Jan 28..31
+    expect(cells[0].isCurrentMonth).toBe(false);
+    expect(cells[0].date.getMonth()).toBe(0); // January
+    expect(cells[0].date.getDate()).toBe(28);
+    expect(cells[3].date.getDate()).toBe(31);
+
+    // First Feb day
+    expect(cells[4].isCurrentMonth).toBe(true);
+    expect(cells[4].date.getMonth()).toBe(1);
+    expect(cells[4].date.getDate()).toBe(1);
+
+    // Last Feb day (Feb 29 in leap year)
+    expect(cells[32].isCurrentMonth).toBe(true);
+    expect(cells[32].date.getDate()).toBe(29);
+
+    // Trailing: Mar 1..9
+    expect(cells[33].isCurrentMonth).toBe(false);
+    expect(cells[33].date.getMonth()).toBe(2);
+    expect(cells[33].date.getDate()).toBe(1);
+  });
+
+  it("never produces empty cells — every slot has a date", () => {
+    const cells = getMonthCalendarCells(2024, 9); // 30 days starting Sunday
+    expect(cells.length).toBe(42);
+    for (const cell of cells) {
+      expect(cell.date).toBeInstanceOf(Date);
+    }
+    // First day is the 1st of the month (no leading days needed since Sep 1 is Sun).
+    expect(cells[0].isCurrentMonth).toBe(true);
+    expect(cells[0].date.getDate()).toBe(1);
+    // Trailing slots come from October.
+    expect(cells[30].isCurrentMonth).toBe(false);
+    expect(cells[30].date.getMonth()).toBe(9);
+  });
+
+  it("handles year boundaries (December → January)", () => {
+    const cells = getMonthCalendarCells(2024, 1); // Jan 2024 starts Monday
+    // 1 leading slot from Dec 2023.
+    expect(cells[0].date.getFullYear()).toBe(2023);
+    expect(cells[0].date.getMonth()).toBe(11);
+    expect(cells[0].date.getDate()).toBe(31);
+    expect(cells[1].isCurrentMonth).toBe(true);
+    expect(cells[1].date.getDate()).toBe(1);
   });
 });
