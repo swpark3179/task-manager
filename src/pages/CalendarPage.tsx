@@ -613,15 +613,6 @@ export default function CalendarPage() {
     }
   };
 
-  const openScheduleBar = (schedule: Schedule) => {
-    setSelectedSchedule(schedule);
-    setScheduleModalRange(normalizeDateRange(schedule.start_date, schedule.end_date));
-    setDragStart(null);
-    setDragEnd(null);
-    setIsDragging(false);
-    setShowScheduleModal(true);
-  };
-
   const closeDayModal = useCallback(() => {
     setSelectedDate(null);
     dayModalDragOffsetRef.current = 0;
@@ -979,7 +970,21 @@ export default function CalendarPage() {
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        openScheduleBar(bar.schedule);
+                        // 월간 뷰에서 일정 막대를 탭하면 편집 모달 대신
+                        // 해당 날짜의 상세 보기 팝업이 열리도록 그 날짜
+                        // 셀을 선택한 것으로 처리한다.
+                        let dateStr: string | null = null;
+                        if (typeof document !== 'undefined' && document.elementsFromPoint) {
+                          const els = document.elementsFromPoint(e.clientX, e.clientY);
+                          for (const el of els) {
+                            if (el instanceof HTMLElement && el.classList.contains('calendar-cell')) {
+                              dateStr = el.getAttribute('data-date');
+                              if (dateStr) break;
+                            }
+                          }
+                        }
+                        if (!dateStr) dateStr = formatDate(week[bar.startCol].date);
+                        handleCellClick(dateStr);
                       }}
                       onMouseDown={(e) => e.stopPropagation()}
                       onTouchStart={(e) => e.stopPropagation()}
