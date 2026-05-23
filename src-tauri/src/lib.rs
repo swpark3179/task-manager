@@ -321,6 +321,16 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             setup_tray(app)?;
+            // On Windows, start in the tray only — the main window stays hidden until the
+            // user opens it from the tray menu. On other desktop platforms, show the main
+            // window on launch as before.
+            #[cfg(all(desktop, not(target_os = "windows")))]
+            {
+                if let Some(window) = app.get_webview_window(MAIN_LABEL) {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
             Ok(())
         })
         .on_window_event(|window, event| {

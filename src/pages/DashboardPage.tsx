@@ -184,6 +184,14 @@ function ExternalIcon() {
     </svg>
   );
 }
+function CalendarIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3 9h18M8 3v4M16 3v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
 function SyncIcon({ spinning }: { spinning?: boolean }) {
   return (
     <svg
@@ -1070,6 +1078,15 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="hdr-actions">
+              <button
+                type="button"
+                className="iconbtn"
+                onClick={() => void openFullApp('/calendar')}
+                aria-label="달력 전체화면 열기"
+                title="달력 전체화면 열기"
+              >
+                <CalendarIcon />
+              </button>
               <button
                 type="button"
                 className="iconbtn"
