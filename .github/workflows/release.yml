@@ -214,7 +214,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-ios
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
 
       - name: Install frontend dependencies
         run: npm install
@@ -231,6 +231,30 @@ jobs:
         run: |
           brew install imagemagick
           find src-tauri/icons/ios/ src-tauri/gen/apple/ -type f -name "*.png" -exec mogrify -background white -alpha remove -alpha off {} + || true
+
+      - name: Diagnose Xcode project and destinations
+        run: |
+          echo "=== Xcode version ==="
+          xcodebuild -version
+          echo "=== Available SDKs ==="
+          xcodebuild -showsdks
+          echo "=== gen/apple structure ==="
+          ls -la src-tauri/gen/apple/ || true
+          ls -la src-tauri/gen/apple/*.xcodeproj/xcshareddata/xcschemes/ 2>/dev/null || true
+          echo "=== xcodebuild -list (workspace) ==="
+          WORKSPACE=$(find src-tauri/gen/apple -maxdepth 2 -name "*.xcworkspace" -print -quit)
+          if [ -n "$WORKSPACE" ]; then
+            echo "Workspace: $WORKSPACE"
+            xcodebuild -list -workspace "$WORKSPACE" || true
+          fi
+          echo "=== xcodebuild -list (project) ==="
+          PROJECT=$(find src-tauri/gen/apple -maxdepth 2 -name "*.xcodeproj" -print -quit)
+          if [ -n "$PROJECT" ]; then
+            echo "Project: $PROJECT"
+            xcodebuild -list -project "$PROJECT" || true
+          fi
+          echo "=== Available simulators ==="
+          xcrun simctl list devices available | head -50 || true
 
       - name: Patch Info.plist for Export Compliance and Bundle Version
         run: |
@@ -343,11 +367,32 @@ jobs:
           echo "=== Verification ==="
           grep -n "CODE_SIGN_STYLE\|PROVISIONING_PROFILE_SPECIFIER\|DEVELOPMENT_TEAM\|IPHONEOS_DEPLOYMENT_TARGET\|OTHER_LDFLAGS\|CURRENT_PROJECT_VERSION" "$PBXPROJ" | head -25
 
+      - name: Pre-boot iOS simulator (xcodebuild destination 안전망)
+        run: |
+          # tauri ios build 의 build action 단계에서 xcodebuild 가 destination
+          # 을 찾지 못해 실패하는 회귀가 있음. 동작 가능한 시뮬레이터를 미리
+          # 부팅해 두면 어떤 경로로 xcodebuild 가 호출되어도 destination 매칭
+          # 이 가능하다.
+          set -e
+          UDID=$(xcrun simctl list devices available -j \
+            | python3 -c "import json,sys;d=json.load(sys.stdin)['devices'];print(next((x['udid'] for runtime,devs in d.items() if 'iOS' in runtime for x in devs if x.get('isAvailable') and 'iPhone' in x['name']), ''))")
+          if [ -z "$UDID" ]; then
+            echo "No iPhone simulator available; creating one..."
+            RUNTIME=$(xcrun simctl list runtimes -j | python3 -c "import json,sys;rs=json.load(sys.stdin)['runtimes'];print(next((r['identifier'] for r in rs if r.get('isAvailable') and 'iOS' in r['name']), ''))")
+            DEVTYPE=$(xcrun simctl list devicetypes -j | python3 -c "import json,sys;dt=json.load(sys.stdin)['devicetypes'];print(next((t['identifier'] for t in dt if 'iPhone-15' in t['identifier'] or 'iPhone-14' in t['identifier'] or 'iPhone-13' in t['identifier']), dt[0]['identifier']))")
+            echo "Creating simulator with runtime=$RUNTIME devicetype=$DEVTYPE"
+            UDID=$(xcrun simctl create "ci-iphone" "$DEVTYPE" "$RUNTIME")
+          fi
+          echo "Booting simulator $UDID"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl list devices booted
+
       - name: Build iOS IPA
         # IOS_CERTIFICATE 미설정 → Tauri의 키체인 관리 건너뜀 (수동 키체인 사용)
         # IOS_MOBILE_PROVISION 설정 → Tauri가 export 시 프로비저닝 프로파일 사용
         # --target aarch64: 디바이스용 아키텍처만 빌드해 시뮬레이터 destination 탐색 회피
-        run: npx tauri ios build --target aarch64 --export-method app-store-connect
+        # --verbose: xcodebuild 호출 시 실제 명령을 노출해 destination 진단
+        run: npx tauri ios build --target aarch64 --export-method app-store-connect --verbose
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
