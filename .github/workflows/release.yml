@@ -195,7 +195,7 @@ jobs:
     needs: prepare
     permissions:
       contents: write
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -204,7 +204,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.4'
+          xcode-version: 'latest-stable'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -346,8 +346,7 @@ jobs:
       - name: Build iOS IPA
         # IOS_CERTIFICATE 미설정 → Tauri의 키체인 관리 건너뜀 (수동 키체인 사용)
         # IOS_MOBILE_PROVISION 설정 → Tauri가 export 시 프로비저닝 프로파일 사용
-        # --target aarch64: 디바이스용 아키텍처만 빌드해 시뮬레이터 destination 탐색 회피
-        run: npx tauri ios build --target aarch64 --export-method app-store-connect
+        run: npx tauri ios build --export-method app-store-connect
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
