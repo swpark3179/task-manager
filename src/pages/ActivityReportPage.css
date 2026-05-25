@@ -341,7 +341,26 @@ body:has(.activity-report-page),
 }
 .activity-report-page .copy-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.activity-report-page .group-body { padding: 4px 0; }
+.activity-report-page .group-body {
+  padding: 4px 0;
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.activity-report-page .group-body::-webkit-scrollbar {
+  width: 8px;
+}
+.activity-report-page .group-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.activity-report-page .group-body::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+  border-radius: 4px;
+  border: 2px solid var(--bg);
+}
+.activity-report-page .group-body::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-3);
+}
 .activity-report-page .item {
   display: flex;
   align-items: center;
