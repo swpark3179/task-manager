@@ -42,6 +42,7 @@ export interface Task {
   description: string | null;
   status: TaskStatus;
   low_priority: boolean;
+  is_favorite: boolean;
   created_date: string;
   completed_at: string | null;
   discarded_at: string | null;
@@ -156,6 +157,7 @@ export interface UpdateTaskInput {
   description?: string | null;
   status?: TaskStatus;
   low_priority?: boolean;
+  is_favorite?: boolean;
   completed_at?: string | null;
   discarded_at?: string | null;
   sort_order?: number;

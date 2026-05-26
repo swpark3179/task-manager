@@ -221,6 +221,7 @@ export default function TodayTabs({ date, isToday, onSummaryChange, onMutate }: 
             onSaveDescription={dayTasks.saveDescription}
             onCreateSnapshot={isToday ? dayTasks.createSnapshot : undefined}
             onDeleteSnapshot={isToday ? dayTasks.deleteSnapshot : undefined}
+            onSetFavorite={dayTasks.setFavorite}
             sortByStatus={isToday}
           />
         )}
@@ -294,6 +295,7 @@ export default function TodayTabs({ date, isToday, onSummaryChange, onMutate }: 
             onSaveDescription={dayTasks.saveDescription}
             onCreateSnapshot={isToday ? dayTasks.createSnapshot : undefined}
             onDeleteSnapshot={isToday ? dayTasks.deleteSnapshot : undefined}
+            onSetFavorite={dayTasks.setFavorite}
             sortByStatus={isToday}
           />
         )}

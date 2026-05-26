@@ -23,12 +23,13 @@ interface TaskItemProps {
   onSaveDescription: (taskId: string, description: string) => void;
   onCreateSnapshot?: (taskId: string) => void;
   onDeleteSnapshot?: (taskId: string) => void;
+  onSetFavorite?: (taskId: string, value: boolean) => void;
 }
 
 export default function TaskItem({
   task, depth = 0, onComplete, onUncomplete, onDiscard, onUndiscard, onDelete,
   onUpdateSettings, onAddChild, onSaveDescription,
-  onCreateSnapshot, onDeleteSnapshot
+  onCreateSnapshot, onDeleteSnapshot, onSetFavorite
 }: TaskItemProps) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
@@ -40,6 +41,11 @@ export default function TaskItem({
   const effectiveStatus = isParent ? getEffectiveStatus(task) : task.status;
   const isCompleted = effectiveStatus === 'completed';
   const isDiscarded = effectiveStatus === 'discarded';
+  // Favorites only render on top-level (root) items so a child star doesn't
+  // visually compete with its parent. Snapshot rows are read-only stand-ins
+  // for the original task and shouldn't expose mutation controls.
+  const showFavorite = depth === 0 && !task.is_snapshot && !!onSetFavorite;
+  const isFavorite = showFavorite && !!task.is_favorite;
 
   // After a rollover, created_date moves to the new day while created_at keeps
   // the original timestamp. Show the original registration day so the user can
@@ -69,7 +75,7 @@ export default function TaskItem({
 
   return (
     <div
-      className={`task-item ${isCompleted ? 'completed' : ''} ${isDiscarded ? 'discarded' : ''} ${expanded ? 'expanded' : ''} ${task.is_snapshot ? 'snapshot' : ''}`}
+      className={`task-item ${isCompleted ? 'completed' : ''} ${isDiscarded ? 'discarded' : ''} ${expanded ? 'expanded' : ''} ${task.is_snapshot ? 'snapshot' : ''} ${isFavorite ? 'favorite' : ''}`}
       style={{ '--depth': depth } as React.CSSProperties}
     >
       <div className="task-item-main" onClick={() => setExpanded(!expanded)}>
@@ -134,6 +140,29 @@ export default function TaskItem({
         </div>
 
         <div className="task-item-actions" onClick={e => e.stopPropagation()}>
+          {showFavorite && (
+            <button
+              className={`btn btn-ghost btn-icon btn-sm task-item-favorite ${isFavorite ? 'is-on' : ''}`}
+              onClick={(e) => { e.stopPropagation(); onSetFavorite!(task.id, !isFavorite); }}
+              title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
+              aria-label={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
+              aria-pressed={isFavorite}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill={isFavorite ? 'currentColor' : 'none'}
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.8 6.2 20.9l1.1-6.5L2.6 9.8l6.5-.9L12 3z" />
+              </svg>
+            </button>
+          )}
           {task.is_snapshot && (
             <button
               className="btn btn-ghost btn-icon btn-sm task-item-original-link"
@@ -211,6 +240,7 @@ export default function TaskItem({
                 onSaveDescription={onSaveDescription}
                 onCreateSnapshot={onCreateSnapshot}
                 onDeleteSnapshot={onDeleteSnapshot}
+                onSetFavorite={onSetFavorite}
               />
             )}
           </TaskDetail>

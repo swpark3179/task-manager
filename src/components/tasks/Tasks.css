@@ -148,7 +148,8 @@
 }
 
 .task-item:hover .task-item-actions,
-.task-item-main:focus-within .task-item-actions {
+.task-item-main:focus-within .task-item-actions,
+.task-item.favorite .task-item-actions {
   opacity: 1;
 }
 
@@ -411,6 +412,44 @@
 .task-item.snapshot {
   border-style: dashed;
   background: var(--bg-tertiary);
+}
+
+/* ----- Favorite emphasis (mobile + desktop list views) -----
+   A warm tint + gold left rail makes favorites stand out from the rest of the
+   list, complementing their pinned-to-top ordering. */
+.task-item.favorite {
+  background: linear-gradient(90deg,
+    color-mix(in srgb, #f5b400 14%, var(--bg-secondary)) 0%,
+    var(--bg-secondary) 80%);
+  border-color: color-mix(in srgb, #f5b400 45%, var(--border-light));
+  box-shadow: inset 4px 0 0 0 #f5b400;
+}
+.task-item.favorite:hover {
+  border-color: color-mix(in srgb, #f5b400 65%, var(--border-color));
+}
+.task-item.favorite .task-item-title {
+  font-weight: 600;
+}
+.task-item.favorite.completed,
+.task-item.favorite.discarded {
+  /* Defensive — terminal states should auto-clear the favorite flag, but if
+     a stale row slips through render with both classes, dim it normally. */
+  box-shadow: none;
+}
+
+.task-item-favorite {
+  color: var(--text-muted);
+}
+.task-item-favorite:hover {
+  color: #f5b400 !important;
+}
+.task-item-favorite.is-on {
+  color: #f5b400 !important;
+  opacity: 1 !important;
+}
+/* Keep the favorite control visible so users can unfavorite without hovering. */
+.task-item .task-item-favorite.is-on {
+  opacity: 1 !important;
 }
 
 .task-item-original-link:hover {

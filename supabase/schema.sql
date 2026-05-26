@@ -18,6 +18,7 @@ CREATE TABLE tasks (
   completed_at  TIMESTAMPTZ,
   discarded_at  TIMESTAMPTZ,
   sort_order    INTEGER NOT NULL DEFAULT 0,
+  is_favorite   BOOLEAN NOT NULL DEFAULT FALSE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -26,6 +27,7 @@ CREATE INDEX idx_tasks_user_id ON tasks(user_id);
 CREATE INDEX idx_tasks_parent_id ON tasks(parent_id);
 CREATE INDEX idx_tasks_created_date ON tasks(created_date);
 CREATE INDEX idx_tasks_status ON tasks(status);
+CREATE INDEX idx_tasks_is_favorite ON tasks(user_id, is_favorite) WHERE is_favorite = TRUE;
 
 -- =============================================
 -- 수행내용 로그 (날짜별 작업 기록)
