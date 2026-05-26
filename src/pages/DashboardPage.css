@@ -454,6 +454,22 @@ body:has(.dashboard-page),
 }
 .dashboard-page .row-actions .iconbtn.is-fav { opacity: 1; color: #f5b400; }
 
+/* ----- Favorite highlight ----- */
+/* A warm tint with a gold accent line makes favorites pop above the rest of
+   the list, even when other rows are doing/done/etc. */
+.dashboard-page .row-fav {
+  background: linear-gradient(90deg, rgba(245, 180, 0, 0.14) 0%, rgba(245, 180, 0, 0.05) 80%);
+  box-shadow: inset 3px 0 0 0 #f5b400;
+}
+.dashboard-page .row-fav:hover {
+  background: linear-gradient(90deg, rgba(245, 180, 0, 0.22) 0%, rgba(245, 180, 0, 0.08) 80%);
+}
+.dashboard-page .row-fav .title { font-weight: 600; }
+.dashboard-page .row-fav.row-doing {
+  background: linear-gradient(90deg, rgba(245, 180, 0, 0.18) 0%, var(--accent-soft) 80%);
+}
+.dashboard-page .node-fav .row-actions { opacity: 1; }
+
 .dashboard-page .open {
   margin: 4px 4px 10px 28px;
   padding: 10px 12px;

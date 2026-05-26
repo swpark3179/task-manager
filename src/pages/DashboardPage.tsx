@@ -17,8 +17,6 @@ import MarkdownViewer from '../components/markdown/MarkdownViewer';
 import { openDetailWindow } from '../lib/detailWindow';
 import './DashboardPage.css';
 
-const FAVORITES_STORAGE_KEY = 'task-manager.dashboard.favorites';
-
 type FilterKey = 'all' | 'in_progress' | 'pending' | 'completed' | 'discarded';
 
 const KOR_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -55,28 +53,6 @@ function formatScheduleTime(time: string | null): string {
   const ap = h >= 12 ? '오후' : '오전';
   const hh = h % 12 === 0 ? 12 : h % 12;
   return `${ap} ${hh}:${String(Number.isNaN(m) ? 0 : m).padStart(2, '0')}`;
-}
-
-function loadFavorites(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
-  try {
-    const raw = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((v): v is string => typeof v === 'string'));
-  } catch {
-    return new Set();
-  }
-}
-
-function persistFavorites(favorites: Set<string>) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(Array.from(favorites)));
-  } catch {
-    // ignore
-  }
 }
 
 function matchesFilter(task: Task, filter: FilterKey): boolean {
@@ -217,7 +193,6 @@ function TaskNode({
   task,
   depth,
   today,
-  isFavorite,
   filter,
   onToggleStatus,
   onSaveTitle,
@@ -234,20 +209,20 @@ function TaskNode({
   task: Task;
   depth: number;
   today: string;
-  isFavorite: boolean;
   filter: FilterKey;
   onToggleStatus: (task: Task) => Promise<void>;
   onSaveTitle: (task: Task, title: string) => Promise<void>;
   onSaveDescription: (task: Task, description: string) => Promise<void>;
   onAddChild: (parentId: string, title: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
-  onToggleFavorite: (id: string) => void;
+  onToggleFavorite: (id: string, value: boolean) => void;
   onCreateSnapshot: (id: string) => Promise<void>;
   onDeleteSnapshot: (id: string) => Promise<void>;
   onOpenDetailPopup: (task: Task) => void;
   onDiscard: (id: string) => Promise<void>;
   onUndiscard: (id: string) => Promise<void>;
 }) {
+  const isFavorite = depth === 0 && !!task.is_favorite;
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<'detail' | 'log'>('detail');
   const [editingTitle, setEditingTitle] = useState(false);
@@ -306,8 +281,8 @@ function TaskNode({
   };
 
   return (
-    <div className={`node node-d${depth}`} style={{ ['--depth' as string]: depth } as CSSProperties}>
-      <div className={`row row-${statusClass}`}>
+    <div className={`node node-d${depth} ${isFavorite ? 'node-fav' : ''}`} style={{ ['--depth' as string]: depth } as CSSProperties}>
+      <div className={`row row-${statusClass} ${isFavorite ? 'row-fav' : ''}`}>
         <button
           type="button"
           className={`chk chk-${statusClass}`}
@@ -368,7 +343,7 @@ function TaskNode({
             <button
               type="button"
               className={`iconbtn iconbtn-sm ${isFavorite ? 'is-fav' : ''}`}
-              onClick={() => onToggleFavorite(task.id)}
+              onClick={() => onToggleFavorite(task.id, !isFavorite)}
               aria-label={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
               title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
             >
@@ -536,7 +511,6 @@ function TaskNode({
                   task={child}
                   depth={depth + 1}
                   today={today}
-                  isFavorite={false}
                   filter={filter}
                   onToggleStatus={onToggleStatus}
                   onSaveTitle={onSaveTitle}
@@ -899,7 +873,6 @@ export default function DashboardPage() {
   const [tab, setTab] = useState<'tasks' | 'schedules' | 'events' | 'later'>('tasks');
   const [scheduleCount, setScheduleCount] = useState<number | null>(null);
   const [eventCount, setEventCount] = useState<number | null>(null);
-  const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
   const [syncing, setSyncing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -930,18 +903,9 @@ export default function DashboardPage() {
   const summary = useMemo(() => calculateStatusSummary(mainTasks), [mainTasks]);
   const progressPct = summary.total ? Math.round((summary.completed / summary.total) * 100) : 0;
 
-  useEffect(() => {
-    persistFavorites(favorites);
-  }, [favorites]);
-
-  const toggleFavorite = useCallback((id: string) => {
-    setFavorites((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  const toggleFavorite = useCallback((id: string, value: boolean) => {
+    void dayTasks.setFavorite(id, value);
+  }, [dayTasks]);
 
   const visibleRoots = useMemo(() => {
     const filtered = filter === 'all'
@@ -952,17 +916,25 @@ export default function DashboardPage() {
     for (const t of filtered) {
       const status = getEffectiveStatus(t);
       const isTerminal = status === 'completed' || status === 'discarded';
-      if (favorites.has(t.id) && !isTerminal) fav.push(t);
+      if (t.is_favorite && !isTerminal) fav.push(t);
       else rest.push(t);
     }
     return [...sortTasksByStatus(fav), ...sortTasksByStatus(rest)];
-  }, [mainTasks, favorites, filter]);
+  }, [mainTasks, filter]);
 
   const laterVisible = useMemo(() => {
     const filtered = filter === 'all'
       ? laterTasks
       : laterTasks.filter((t) => matchesFilter(t, filter));
-    return sortTasksByStatus(filtered);
+    const fav: Task[] = [];
+    const rest: Task[] = [];
+    for (const t of filtered) {
+      const status = getEffectiveStatus(t);
+      const isTerminal = status === 'completed' || status === 'discarded';
+      if (t.is_favorite && !isTerminal) fav.push(t);
+      else rest.push(t);
+    }
+    return [...sortTasksByStatus(fav), ...sortTasksByStatus(rest)];
   }, [laterTasks, filter]);
 
   const addTask = async (e: FormEvent) => {
@@ -1214,7 +1186,6 @@ export default function DashboardPage() {
                   task={task}
                   depth={0}
                   today={today}
-                  isFavorite={favorites.has(task.id)}
                   filter={filter}
                   onToggleStatus={toggleStatus}
                   onSaveTitle={(item, title) => dayTasks.updateSettings(item.id, { title })}
@@ -1279,7 +1250,6 @@ export default function DashboardPage() {
                 task={task}
                 depth={0}
                 today={today}
-                isFavorite={favorites.has(task.id)}
                 filter={filter}
                 onToggleStatus={toggleStatus}
                 onSaveTitle={(item, title) => dayTasks.updateSettings(item.id, { title })}

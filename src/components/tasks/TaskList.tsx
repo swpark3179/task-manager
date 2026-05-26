@@ -20,6 +20,7 @@ interface TaskListProps {
   onSaveDescription: (taskId: string, description: string) => void;
   onCreateSnapshot?: (taskId: string) => void;
   onDeleteSnapshot?: (taskId: string) => void;
+  onSetFavorite?: (taskId: string, value: boolean) => void;
   isHistory?: boolean;
   sortByStatus?: boolean;
 }
@@ -39,10 +40,28 @@ function sortTopLevelByStatus(tasks: Task[]): Task[] {
   });
 }
 
+// Active favorites surface above the rest of the list. Terminal states (done/
+// discarded) lose the boost so the list doesn't pin stale finished items.
+function isActiveFavorite(task: Task): boolean {
+  if (!task.is_favorite) return false;
+  const status = getEffectiveStatus(task);
+  return status !== 'completed' && status !== 'discarded';
+}
+
+function liftFavoritesToTop(tasks: Task[]): Task[] {
+  const fav: Task[] = [];
+  const rest: Task[] = [];
+  for (const t of tasks) {
+    if (isActiveFavorite(t)) fav.push(t);
+    else rest.push(t);
+  }
+  return [...fav, ...rest];
+}
+
 export default function TaskList({
   tasks, loading, onAddTask, onComplete, onUncomplete, onDiscard, onUndiscard,
   onDelete, onUpdateSettings, onAddChild, onSaveDescription,
-  onCreateSnapshot, onDeleteSnapshot, isHistory, sortByStatus
+  onCreateSnapshot, onDeleteSnapshot, onSetFavorite, isHistory, sortByStatus
 }: TaskListProps) {
   const [viewMode, setViewMode] = useState<'tree' | 'leaf'>('tree');
   const [statusFilter, setStatusFilter] = useState<TaskStatus | null>(null);
@@ -58,10 +77,10 @@ export default function TaskList({
     return filterTasksByStatus(base, statusFilter);
   }, [viewMode, tasks, statusFilter]);
 
-  const sortedTasks = useMemo(
-    () => (sortByStatus ? sortTopLevelByStatus(displayTasks) : displayTasks),
-    [displayTasks, sortByStatus],
-  );
+  const sortedTasks = useMemo(() => {
+    const ordered = sortByStatus ? sortTopLevelByStatus(displayTasks) : displayTasks;
+    return liftFavoritesToTop(ordered);
+  }, [displayTasks, sortByStatus]);
 
   return (
     <div className="task-list">
@@ -196,6 +215,7 @@ export default function TaskList({
             onSaveDescription={onSaveDescription}
             onCreateSnapshot={onCreateSnapshot}
             onDeleteSnapshot={onDeleteSnapshot}
+            onSetFavorite={onSetFavorite}
             showAddInput={false}
           />
         </>

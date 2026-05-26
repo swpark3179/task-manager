@@ -10,6 +10,7 @@ import {
   undiscardTask,
   createTaskSnapshot,
   deleteTaskSnapshot,
+  setTaskFavorite,
 } from '../lib/database';
 import { getTasksFromMemoryCacheSync, invalidateMemoryCacheEntry } from '../lib/cache';
 import { useSyncStatus } from '../components/common/SyncIndicator';
@@ -60,6 +61,7 @@ export interface UseDayTasksResult {
   uncomplete: (id: string) => Promise<void>;
   discard: (id: string) => Promise<void>;
   undiscard: (id: string) => Promise<void>;
+  setFavorite: (id: string, value: boolean) => Promise<void>;
 }
 
 export function useDayTasks(date: string): UseDayTasksResult {
@@ -198,6 +200,10 @@ export function useDayTasks(date: string): UseDayTasksResult {
     await mutate(() => undiscardTask(id), 'Task action failed:');
   }, [mutate]);
 
+  const setFavorite = useCallback(async (id: string, value: boolean) => {
+    await mutate(() => setTaskFavorite(id, value), 'Failed to update favorite:');
+  }, [mutate]);
+
   return {
     tasks,
     loading,
@@ -214,5 +220,6 @@ export function useDayTasks(date: string): UseDayTasksResult {
     uncomplete,
     discard,
     undiscard,
+    setFavorite,
   };
 }

@@ -275,6 +275,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
     parent_id: input.parent_id || null,
     category_id: input.category_id || null,
     low_priority: input.low_priority || false,
+    is_favorite: false,
     description: input.description || null,
     status: 'pending',
     created_date: createdDate,
@@ -372,9 +373,12 @@ export async function completeTask(id: string): Promise<void> {
 
   // Optimistic update — also clear has_snapshot flag because the manual
   // progress snapshot for today is removed when the task itself completes.
+  // Favorites auto-clear on terminal states so the favorites list only
+  // surfaces actionable items.
   await updateTaskInAllCaches(id, {
     status: 'completed',
     completed_at: now,
+    is_favorite: false,
     has_snapshot: false,
   });
   await calendarCache.invalidate();
@@ -383,6 +387,7 @@ export async function completeTask(id: string): Promise<void> {
     const updates: UpdateTaskInput = {
       status: 'completed',
       completed_at: now,
+      is_favorite: false,
     };
     const { error } = await supabase.from('tasks').update(updates).eq('id', id);
     if (error) throw error;
@@ -420,10 +425,12 @@ export async function undiscardTask(id: string): Promise<void> {
 
 export async function discardTask(id: string): Promise<void> {
   const now = new Date().toISOString();
-  // Optimistic update
+  // Optimistic update — also clear favorite, since discarded tasks should
+  // drop out of the prioritized list.
   await updateTaskInAllCaches(id, {
     status: 'discarded',
-    discarded_at: now
+    discarded_at: now,
+    is_favorite: false,
   });
   await calendarCache.invalidate();
 
@@ -433,9 +440,25 @@ export async function discardTask(id: string): Promise<void> {
       .update({
         status: 'discarded',
         discarded_at: now,
+        is_favorite: false,
       })
       .eq('id', id);
 
+    if (error) throw error;
+  });
+}
+
+export async function setTaskFavorite(id: string, isFavorite: boolean): Promise<void> {
+  // Optimistic update — the star toggles immediately while the DB update
+  // syncs in the background.
+  await updateTaskInAllCaches(id, { is_favorite: isFavorite });
+  await calendarCache.invalidate();
+
+  runBackgroundSync(async () => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ is_favorite: isFavorite })
+      .eq('id', id);
     if (error) throw error;
   });
 }
