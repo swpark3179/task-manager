@@ -115,18 +115,20 @@ export default function TodayTabs({ date, isToday, onSummaryChange, onMutate }: 
     onSummaryChange?.(summary);
   }, [summary, onSummaryChange]);
 
+  const todayString = getTodayString();
+
   const events = useMemo<UpcomingEvent[]>(() => {
     const out: UpcomingEvent[] = [];
+    const startDate = date < todayString ? todayString : date;
     for (let i = 0; i <= EVENT_DAYS_AHEAD; i++) {
-      const d = addDaysIso(date, i);
+      const d = addDaysIso(startDate, i);
       for (const h of getHolidaysForDate(d, userHolidays)) {
         out.push({ date: d, title: h.title, type: h.type });
       }
     }
     return out.sort((a, b) => a.date.localeCompare(b.date));
-  }, [date, userHolidays]);
+  }, [date, todayString, userHolidays]);
 
-  const todayString = getTodayString();
   const referenceDay = isToday ? todayString : date;
 
   const taskTotal = mainTasks.length;
