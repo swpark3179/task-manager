@@ -1,27 +1,54 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import MDEditor from '@uiw/react-md-editor';
-import mermaid from 'mermaid';
+import { useColorMode } from './useColorMode';
 import './Markdown.css';
 
 interface MarkdownViewerProps {
   content: string;
 }
 
-// Initialize mermaid
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'neutral',
-  fontFamily: 'Inter, sans-serif',
-});
+// Mermaid is heavy (it pulls in a layout/parser engine), so we load and
+// initialise it lazily — only the first time a diagram actually needs to be
+// rendered. Eagerly importing it on every viewer mount was a notable source of
+// main-thread stalls on mobile where many viewers can mount at once.
+let mermaidInitPromise: Promise<typeof import('mermaid').default> | null = null;
+function getMermaid() {
+  if (!mermaidInitPromise) {
+    mermaidInitPromise = import('mermaid').then(({ default: mermaid }) => {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'neutral',
+        fontFamily: 'inherit',
+      });
+      return mermaid;
+    });
+  }
+  return mermaidInitPromise;
+}
 
-export default function MarkdownViewer({ content }: MarkdownViewerProps) {
+function hasMermaidBlock(content: string): boolean {
+  return content.includes('```mermaid') || content.includes('~~~mermaid');
+}
+
+function MarkdownViewer({ content }: MarkdownViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const colorMode = useColorMode();
 
-  // Render mermaid diagrams after markdown is rendered
+  // Render mermaid diagrams after markdown is rendered. Skip entirely when the
+  // content has no mermaid fence so the common case does no extra work, sets no
+  // timers and never touches the DOM.
   useEffect(() => {
+    if (!hasMermaidBlock(content)) return;
+
+    let cancelled = false;
     const timer = setTimeout(() => {
-      if (containerRef.current) {
-        const mermaidBlocks = containerRef.current.querySelectorAll('code.language-mermaid');
+      const container = containerRef.current;
+      if (!container) return;
+      const mermaidBlocks = container.querySelectorAll('code.language-mermaid');
+      if (mermaidBlocks.length === 0) return;
+
+      void getMermaid().then((mermaid) => {
+        if (cancelled) return;
         const timestamp = Date.now();
         mermaidBlocks.forEach(async (block, index) => {
           const parent = block.parentElement;
@@ -29,6 +56,7 @@ export default function MarkdownViewer({ content }: MarkdownViewerProps) {
             const id = `mermaid-${timestamp}-${index}`;
             try {
               const { svg } = await mermaid.render(id, block.textContent || '');
+              if (cancelled) return;
               const wrapper = document.createElement('div');
               wrapper.className = 'mermaid-diagram';
               wrapper.innerHTML = svg;
@@ -38,15 +66,20 @@ export default function MarkdownViewer({ content }: MarkdownViewerProps) {
             }
           }
         });
-      }
+      });
     }, 100);
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [content]);
 
   return (
-    <div className="markdown-viewer" ref={containerRef} data-color-mode="light">
+    <div className="markdown-viewer" ref={containerRef} data-color-mode={colorMode}>
       <MDEditor.Markdown source={content} />
     </div>
   );
 }
+
+export default memo(MarkdownViewer);

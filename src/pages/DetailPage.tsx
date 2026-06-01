@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useDayTasks } from '../hooks/useDayTasks';
 import MarkdownViewer from '../components/markdown/MarkdownViewer';
+import MarkdownEditor from '../components/markdown/MarkdownEditor';
 import { getCurrentTauriWindow, isTauriRuntime } from '../lib/runtimeWindow';
 import type { Task } from '../types';
 import './DetailPage.css';
@@ -31,7 +32,6 @@ export default function DetailPage() {
   const task = useMemo(() => findTask(dayTasks.tasks, taskId), [dayTasks.tasks, taskId]);
 
   const [editing, setEditing] = useState(false);
-  const [tab, setTab] = useState<'write' | 'preview'>('write');
   const [draft, setDraft] = useState('');
 
   useEffect(() => {
@@ -58,7 +58,6 @@ export default function DetailPage() {
 
   const startEditing = () => {
     setDraft(task.description ?? '');
-    setTab('write');
     setEditing(true);
   };
 
@@ -96,37 +95,15 @@ export default function DetailPage() {
         </div>
       </header>
 
-      {editing && (
-        <div className="detailpage-tabs">
-          <button
-            type="button"
-            className={`dp-tab ${tab === 'write' ? 'dp-tab-on' : ''}`}
-            onClick={() => setTab('write')}
-          >작성</button>
-          <button
-            type="button"
-            className={`dp-tab ${tab === 'preview' ? 'dp-tab-on' : ''}`}
-            onClick={() => setTab('preview')}
-          >미리보기</button>
-        </div>
-      )}
-
       <main className="detailpage-body">
         {editing ? (
-          tab === 'write' ? (
-            <textarea
-              className="dp-editor"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={'# 제목\n\n- 항목 1\n- 항목 2'}
-              spellCheck={false}
-              autoFocus
-            />
-          ) : (
-            <div className="dp-preview">
-              {draft.trim() ? <MarkdownViewer content={draft} /> : <div className="dp-empty">미리볼 내용이 없습니다.</div>}
-            </div>
-          )
+          <MarkdownEditor
+            value={draft}
+            onChange={setDraft}
+            placeholder={'# 제목\n\n- 항목 1\n- 항목 2'}
+            autoFocus
+            fill
+          />
         ) : task.description && task.description.trim() ? (
           <MarkdownViewer content={task.description} />
         ) : (

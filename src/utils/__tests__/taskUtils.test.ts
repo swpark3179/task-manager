@@ -1,5 +1,5 @@
 import { expect, test, describe } from "bun:test";
-import { calculateStatusSummary } from "../taskUtils";
+import { calculateStatusSummary, filterActiveTasks } from "../taskUtils";
 import type { Task, TaskStatus } from "../../types";
 
 const createTask = (id: string, status: TaskStatus): Task => ({
@@ -62,5 +62,46 @@ describe("calculateStatusSummary", () => {
       pending: 0,
       discarded: 0,
     });
+  });
+});
+
+describe("filterActiveTasks", () => {
+  test("drops completed and discarded top-level tasks", () => {
+    const tasks: Task[] = [
+      createTask('1', 'pending'),
+      createTask('2', 'in_progress'),
+      createTask('3', 'completed'),
+      createTask('4', 'discarded'),
+    ];
+
+    const active = filterActiveTasks(tasks);
+    expect(active.map((t) => t.id)).toEqual(['1', '2']);
+  });
+
+  test("keeps a terminal-looking parent when it has active children", () => {
+    const parent: Task = {
+      ...createTask('p', 'pending'),
+      children: [
+        createTask('c1', 'completed'),
+        createTask('c2', 'in_progress'),
+      ],
+    };
+
+    const active = filterActiveTasks([parent]);
+    expect(active).toHaveLength(1);
+    // Only the still-active child survives under the retained parent.
+    expect(active[0].children?.map((c) => c.id)).toEqual(['c2']);
+  });
+
+  test("drops a parent whose children are all finished", () => {
+    const parent: Task = {
+      ...createTask('p', 'pending'),
+      children: [
+        createTask('c1', 'completed'),
+        createTask('c2', 'discarded'),
+      ],
+    };
+
+    expect(filterActiveTasks([parent])).toHaveLength(0);
   });
 });

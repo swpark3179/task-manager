@@ -14,10 +14,11 @@ import {
 import { getHolidaysForDate } from '../utils/koreanHolidays';
 import type { Holiday, HolidayType, Schedule, Task, TaskStatus } from '../types';
 import MarkdownViewer from '../components/markdown/MarkdownViewer';
+import MarkdownEditor from '../components/markdown/MarkdownEditor';
 import { openDetailWindow } from '../lib/detailWindow';
 import './DashboardPage.css';
 
-type FilterKey = 'all' | 'in_progress' | 'pending' | 'completed' | 'discarded';
+type FilterKey = 'all' | 'active' | 'in_progress' | 'pending' | 'completed' | 'discarded';
 
 const KOR_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -58,7 +59,11 @@ function formatScheduleTime(time: string | null): string {
 function matchesFilter(task: Task, filter: FilterKey): boolean {
   if (filter === 'all') return true;
   const status = getEffectiveStatus(task);
-  if (status === filter) return true;
+  if (filter === 'active') {
+    if (status === 'pending' || status === 'in_progress') return true;
+  } else if (status === filter) {
+    return true;
+  }
   return (task.children || []).some((c) => matchesFilter(c, filter));
 }
 
@@ -423,10 +428,10 @@ function TaskNode({
             <div className="detail">
               {editingDetail ? (
                 <>
-                  <textarea
-                    className="detail-edit"
+                  <MarkdownEditor
                     value={detailDraft}
-                    onChange={(e) => setDetailDraft(e.target.value)}
+                    onChange={setDetailDraft}
+                    height={140}
                     placeholder="마크다운으로 상세 내용 작성…"
                     autoFocus
                   />
@@ -953,6 +958,7 @@ export default function DashboardPage() {
 
   const filterButtons: { k: FilterKey; l: string; n: number }[] = [
     { k: 'all', l: '전체', n: summary.total },
+    { k: 'active', l: '남은 작업', n: summary.inProgress + summary.pending },
     { k: 'in_progress', l: '진행', n: summary.inProgress },
     { k: 'pending', l: '대기', n: summary.pending },
     { k: 'completed', l: '완료', n: summary.completed },
