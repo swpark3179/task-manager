@@ -1,0 +1,330 @@
+/* ============================================================
+   Task Manager — Unified Design Tokens  (Phase 0)
+   ------------------------------------------------------------
+   Single source of truth. Replaces the split between
+   Dashboard (--accent / --fg) and Nord (--accent-primary /
+   --text-primary) systems. Dashboard naming is canonical;
+   Nord values are mapped on top as aliases for gradual
+   migration of the production src/ code.
+
+   Layers:
+     1. Primitive palette      (raw hex — never used directly in UI)
+     2. Semantic surface/text  (--bg*, --fg*, --border*)
+     3. Brand & status         (--accent, status, category)
+     4. Typography / spacing / radius / shadow / motion
+     5. Dark theme overrides   ([data-theme="dark"])
+     6. Base, token-driven components
+   ============================================================ */
+
+:root {
+  /* ---- 1. Primitive palette (Dashboard) ---- */
+  --c-white:  #ffffff;
+  --c-ink:    #1c2230;   /* near-black navy */
+  --c-blue:   #4f7cff;
+  --c-green:  #51a36e;
+  --c-amber:  #d97a2c;
+  --c-red:    #c14040;
+  --c-teal:   #2f9bb0;
+
+  /* ---- Nord reference (kept for dark theme + migration) ---- */
+  --nord0:#2e3440; --nord1:#3b4252; --nord2:#434c5e; --nord3:#4c566a;
+  --nord4:#d8dee9; --nord5:#e5e9f0; --nord6:#eceff4;
+  --nord8:#88c0d0; --nord10:#5e81ac;
+  --nord11:#bf616a; --nord12:#d08770; --nord13:#ebcb8b; --nord14:#a3be8c;
+
+  /* ---- 2. Semantic surfaces & text ---- */
+  --bg:        #ffffff;   /* primary surface (cards) */
+  --bg-2:      #f6f7f9;   /* app background */
+  --bg-3:      #eef0f4;   /* recessed fill / chips */
+  --bg-4:      #e6e9ef;   /* hover fill */
+  --fg:        #1c2230;   /* primary text */
+  --fg-2:      #4a5366;   /* secondary text */
+  --fg-3:      #8a93a6;   /* muted text / icons */
+  --fg-4:      #b5bcca;   /* faint text / disabled */
+  --border:    #e6e9ef;   /* hairline */
+  --border-2:  #d3d7e0;   /* stronger border */
+  --scrim:     rgba(15,23,42,0.04);
+
+  /* ---- 3a. Brand accent ---- */
+  --accent:        #4f7cff;
+  --accent-soft:   #e6edff;
+  --accent-dark:   #2a4cba;   /* text on soft / pressed */
+  --accent-fg:     #ffffff;   /* text on solid accent */
+
+  /* ---- 3b. Task status (4 states — distinct from accent) ----
+     ⚠ Phase 2 finalises hues + contrast. "doing" is intentionally
+     teal so it never collides with the blue accent. */
+  --todo:          #b5bcca;   --todo-soft:    #eef0f4;   --todo-fg:    #5a6373;
+  --doing:         #2f9bb0;   --doing-soft:   #e2f3f6;   --doing-fg:   #1d6b7a;
+  --done:          #51a36e;   --done-soft:    #e6f3eb;   --done-fg:    #2f6b46;
+  --discard:       #d97a2c;   --discard-soft: #fdf0e3;   --discard-fg: #a85b1c;
+
+  /* ---- 3c. Categories / semantic alerts ---- */
+  --personal:      #51a36e;   --personal-soft: #e6f3eb;  --personal-dark:#2f6b46;
+  --company:       #4f7cff;   --company-soft:  #e6edff;  --company-dark: #2a4cba;
+  --holiday:       #c14040;   --holiday-soft:  #fbeaea;  --holiday-dark: #8c2a2a;
+  --warn:          #d97a2c;   --warn-soft:     #fdf0e3;
+  --danger:        #c14040;   --danger-soft:   #fbeaea;
+  --star:          #e8a93a;   /* favorite / bookmark */
+  --star-soft:     #fbf0d8;
+
+  /* ---- 4a. Typography ---- */
+  --font-sans: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  --text-xs:   11.5px;
+  --text-sm:   12.5px;
+  --text-base: 13.5px;
+  --text-md:   15px;
+  --text-lg:   17px;
+  --text-xl:   22px;
+  --text-2xl:  28px;
+  --text-3xl:  40px;
+  --lh-tight:  1.2;
+  --lh-snug:   1.4;
+  --lh-normal: 1.6;
+
+  /* ---- 4b. Spacing scale ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* ---- 4c. Radius ---- */
+  --r-xs:   4px;
+  --r-sm:   6px;
+  --r-md:   10px;
+  --r-lg:   14px;
+  --r-xl:   18px;
+  --r-full: 9999px;
+
+  /* ---- 4d. Shadows ---- */
+  --shadow-1: 0 1px 2px rgba(15,23,42,0.04), 0 0 0 1px rgba(15,23,42,0.04);
+  --shadow-2: 0 8px 24px -8px rgba(15,23,42,0.10), 0 0 0 1px rgba(15,23,42,0.05);
+  --shadow-3: 0 24px 60px -12px rgba(15,23,42,0.18), 0 8px 24px -8px rgba(15,23,42,0.10), 0 0 0 1px rgba(15,23,42,0.04);
+
+  /* ---- 4e. Motion ---- */
+  --t-fast:   150ms ease;
+  --t-normal: 250ms ease;
+
+  /* ---- 4f. Density (Phase 3) — comfortable default ---- */
+  --row-pad-y: 9px;
+  --row-gap:   10px;
+  --tab-pad-y: 11px;
+  --chk-size:  19px;
+  --card-pad:  18px;
+}
+
+/* Compact density — opt in on a container (e.g. desktop widget) */
+[data-density="compact"] {
+  --row-pad-y: 5px;
+  --row-gap:   6px;
+  --tab-pad-y: 8px;
+  --chk-size:  17px;
+  --card-pad:  12px;
+  --text-base: 13px;
+}
+
+/* ============================================================
+   5. Dark theme — token-only override (reuses Nord palette)
+   ============================================================ */
+[data-theme="dark"] {
+  --bg:        #1c2230;
+  --bg-2:      #161b26;
+  --bg-3:      #262d3b;
+  --bg-4:      #323a4a;
+  --fg:        #eceff4;
+  --fg-2:      #c8cedb;
+  --fg-3:      #8a93a6;
+  --fg-4:      #5a6373;
+  --border:    #2c3340;
+  --border-2:  #3a4252;
+  --scrim:     rgba(255,255,255,0.05);
+
+  --accent:        #6b91ff;
+  --accent-soft:   rgba(107,145,255,0.16);
+  --accent-dark:   #aac1ff;
+  --accent-fg:     #0e1422;
+
+  --todo:    #5a6373; --todo-soft: rgba(181,188,202,0.12); --todo-fg: #aab2c0;
+  --doing:   #56c6da; --doing-soft: rgba(47,155,176,0.18);  --doing-fg: #9fe3ee;
+  --done:    #6cc08a; --done-soft: rgba(81,163,110,0.18);   --done-fg: #a7dab9;
+  --discard: #e0935a; --discard-soft: rgba(217,122,44,0.18); --discard-fg: #f0c39a;
+
+  --personal: #6cc08a; --personal-soft: rgba(81,163,110,0.18); --personal-dark:#a7dab9;
+  --company:  #6b91ff; --company-soft: rgba(107,145,255,0.16); --company-dark:#aac1ff;
+  --holiday:  #e07a7a; --holiday-soft: rgba(193,64,64,0.18);   --holiday-dark:#f0a8a8;
+  --warn:     #e0935a; --warn-soft: rgba(217,122,44,0.18);
+  --danger:   #e07a7a; --danger-soft: rgba(193,64,64,0.18);
+  --star:     #f0c45e;
+  --star-soft: rgba(240,196,94,0.18);
+
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.04);
+  --shadow-2: 0 8px 24px -8px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-3: 0 24px 60px -12px rgba(0,0,0,0.6), 0 8px 24px -8px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+/* ============================================================
+   6. Base, token-driven components & reset
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg-2);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--lh-normal);
+  font-feature-settings: 'tnum';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Korean-safe defaults: body text breaks on word boundaries; UI chrome never wraps */
+body { word-break: keep-all; }
+button, .ui-btn, .ui-tab, .ui-badge, .ui-pill, .ui-chip, label, th { white-space: nowrap; }
+
+/* ---- Buttons ---- */
+.ui-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  user-select: none;
+}
+.ui-btn--primary { background: var(--accent); color: var(--accent-fg); }
+.ui-btn--primary:hover { filter: brightness(1.07); box-shadow: var(--shadow-1); }
+.ui-btn--primary:active { transform: translateY(1px); }
+.ui-btn--secondary { background: var(--bg); color: var(--fg); border: 1px solid var(--border-2); }
+.ui-btn--secondary:hover { background: var(--bg-3); }
+.ui-btn--ghost { background: transparent; color: var(--fg-2); }
+.ui-btn--ghost:hover { background: var(--scrim); color: var(--fg); }
+.ui-btn--danger { background: var(--danger); color: #fff; }
+.ui-btn--danger:hover { filter: brightness(1.05); }
+.ui-btn--sm { padding: 5px 10px; font-size: var(--text-xs); }
+
+/* ---- Input ---- */
+.ui-input {
+  width: 100%;
+  appearance: none;
+  padding: 9px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-base);
+  outline: none;
+  transition: all var(--t-fast);
+}
+.ui-input::placeholder { color: var(--fg-3); }
+.ui-input:hover:not(:focus) { border-color: var(--border-2); }
+.ui-input:focus { border-color: var(--accent); background: var(--bg); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* ---- Card ---- */
+.ui-card {
+  background: var(--bg);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-2);
+}
+
+/* ---- Badge ---- */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: var(--r-full);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.5;
+}
+.ui-badge .dot { width: 6px; height: 6px; border-radius: var(--r-full); background: currentColor; }
+.ui-badge--todo    { background: var(--todo-soft);    color: var(--todo-fg); }
+.ui-badge--doing   { background: var(--doing-soft);   color: var(--doing-fg); }
+.ui-badge--done    { background: var(--done-soft);    color: var(--done-fg); }
+.ui-badge--discard { background: var(--discard-soft); color: var(--discard-fg); }
+
+/* ---- Status checkbox ---- */
+.ui-chk {
+  appearance: none;
+  flex-shrink: 0;
+  width: var(--chk-size); height: var(--chk-size);
+  border: 1.7px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-fg);
+  transition: all var(--t-fast);
+  padding: 0;
+}
+.ui-chk:hover { border-color: var(--accent); }
+.ui-chk--done  { background: var(--done);  border-color: var(--done); }
+.ui-chk--doing { background: var(--doing); border-color: var(--doing); }
+.ui-chk--doing::after { content:""; width:7px; height:7px; border-radius:var(--r-full); background: var(--accent-fg); }
+
+/* ---- Toggle switch ---- */
+.ui-switch {
+  position: relative;
+  width: 44px; height: 24px;
+  background: var(--border-2);
+  border: none;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: background var(--t-fast);
+}
+.ui-switch::after {
+  content: "";
+  position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  background: #fff; border-radius: 50%;
+  box-shadow: var(--shadow-1);
+  transition: transform var(--t-fast);
+}
+.ui-switch[aria-checked="true"] { background: var(--accent); }
+.ui-switch[aria-checked="true"]::after { transform: translateX(20px); }
+
+/* ---- Tabs ---- */
+.ui-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
+.ui-tab {
+  appearance: none;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--fg-3);
+  cursor: pointer;
+  padding: 11px 14px 10px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: color var(--t-fast);
+}
+.ui-tab:hover { color: var(--fg-2); }
+.ui-tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 700; }
+.ui-tab .n {
+  font-size: var(--text-xs); font-weight: 700;
+  background: var(--bg-3); color: var(--fg-3);
+  padding: 1px 7px; border-radius: var(--r-full);
+  font-variant-numeric: tabular-nums;
+}
+.ui-tab[aria-selected="true"] .n { background: var(--accent-soft); color: var(--accent-dark); }

@@ -21,10 +21,12 @@ import {
 import type { ProxySettings } from '../types';
 import CategoryManager from '../components/settings/CategoryManager';
 import HolidayManager from '../components/settings/HolidayManager';
+import { useAppearance } from '../contexts/AppearanceContext';
 import './Pages.css';
 
 export default function SettingsPage() {
   const { user, signOut } = useAuth();
+  const { theme, density, weekStart, setTheme, setDensity, setWeekStart } = useAppearance();
   const [proxyEnabled, setProxyEnabled] = useState(false);
   const [proxyHost, setProxyHost] = useState('');
   const [proxyPort, setProxyPort] = useState('');
@@ -275,6 +277,87 @@ export default function SettingsPage() {
       </div>
 
       <div className="page-content settings-sections">
+        {/* Appearance */}
+        <section className="settings-section card">
+          <h3 className="settings-section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </svg>
+            화면
+          </h3>
+          <div className="settings-field settings-field-row">
+            <label className="settings-label">테마</label>
+            <div className="settings-seg" role="group" aria-label="테마">
+              <button
+                type="button"
+                className={`settings-seg-btn ${theme === 'light' ? 'is-active' : ''}`}
+                onClick={() => setTheme('light')}
+                aria-pressed={theme === 'light'}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                </svg>
+                라이트
+              </button>
+              <button
+                type="button"
+                className={`settings-seg-btn ${theme === 'dark' ? 'is-active' : ''}`}
+                onClick={() => setTheme('dark')}
+                aria-pressed={theme === 'dark'}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+                다크
+              </button>
+            </div>
+          </div>
+          <div className="settings-field settings-field-row">
+            <label className="settings-label">밀도</label>
+            <div className="settings-seg" role="group" aria-label="밀도">
+              <button
+                type="button"
+                className={`settings-seg-btn ${density === 'comfortable' ? 'is-active' : ''}`}
+                onClick={() => setDensity('comfortable')}
+                aria-pressed={density === 'comfortable'}
+              >
+                여유
+              </button>
+              <button
+                type="button"
+                className={`settings-seg-btn ${density === 'compact' ? 'is-active' : ''}`}
+                onClick={() => setDensity('compact')}
+                aria-pressed={density === 'compact'}
+              >
+                조밀
+              </button>
+            </div>
+          </div>
+          <div className="settings-field settings-field-row">
+            <label className="settings-label">주 시작 요일</label>
+            <div className="settings-seg" role="group" aria-label="주 시작 요일">
+              <button
+                type="button"
+                className={`settings-seg-btn ${weekStart === 'sun' ? 'is-active' : ''}`}
+                onClick={() => setWeekStart('sun')}
+                aria-pressed={weekStart === 'sun'}
+              >
+                일요일
+              </button>
+              <button
+                type="button"
+                className={`settings-seg-btn ${weekStart === 'mon' ? 'is-active' : ''}`}
+                onClick={() => setWeekStart('mon')}
+                aria-pressed={weekStart === 'mon'}
+              >
+                월요일
+              </button>
+            </div>
+          </div>
+        </section>
+
         {/* Account */}
         <section className="settings-section card">
           <h3 className="settings-section-title">

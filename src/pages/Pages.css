@@ -584,6 +584,47 @@
   }
 }
 
+/* === Appearance segmented control === */
+.settings-seg {
+  display: inline-flex;
+  background: var(--bg-3);
+  border-radius: var(--r-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.settings-seg-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--fg-2);
+  padding: 6px 12px;
+  border-radius: 5px;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--t-fast);
+  white-space: nowrap;
+}
+
+.settings-seg-btn:hover:not(.is-active) {
+  color: var(--fg);
+}
+
+.settings-seg-btn.is-active {
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: var(--shadow-1);
+}
+
+[data-theme="dark"] .settings-seg-btn.is-active {
+  background: var(--bg-4);
+}
+
 /* === Responsive === */
 @media (max-width: 767px) {
   .page-title {

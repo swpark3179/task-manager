@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AppearanceProvider } from './contexts/AppearanceContext';
 import AppShell from './components/layout/AppShell';
 import LoginPage from './components/auth/LoginPage';
 import SignUpPage from './components/auth/SignUpPage';
@@ -65,10 +66,12 @@ function AppRoutes() {
 export default function App() {
   return (
     <HashRouter>
-      <AuthProvider>
-        <AppRoutes />
-        <SyncBlocker />
-      </AuthProvider>
+      <AppearanceProvider>
+        <AuthProvider>
+          <AppRoutes />
+          <SyncBlocker />
+        </AuthProvider>
+      </AppearanceProvider>
     </HashRouter>
   );
 }
