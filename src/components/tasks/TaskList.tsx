@@ -67,7 +67,12 @@ export default function TaskList({
   // `active` is a virtual filter that hides terminal (완료/폐기) tasks — the
   // common "show only what's left" view. Otherwise a single status is matched.
   const [statusFilter, setStatusFilter] = useState<TaskStatus | 'active' | null>(null);
-  const summary = useMemo(() => calculateStatusSummary(tasks), [tasks]);
+  // 건수 집계는 현재 보기 모드를 따른다: 트리 뷰는 최상위 작업 기준, 최하위 작업
+  // 보기(leaf) 뷰는 최하위 작업 기준으로 남은작업/완료/진행/대기 건수를 표시한다.
+  const summary = useMemo(
+    () => calculateStatusSummary(viewMode === 'tree' ? tasks : getLeafTasks(tasks)),
+    [viewMode, tasks],
+  );
   const activeCount = summary.pending + summary.inProgress;
 
   const toggleFilter = useCallback((status: TaskStatus | 'active') => {

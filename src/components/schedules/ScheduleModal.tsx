@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import MDEditor from '@uiw/react-md-editor';
+import MarkdownEditor from '../markdown/MarkdownEditor';
 import { createSchedule, updateSchedule, deleteSchedule, fetchCategories } from '../../lib/database';
 import {
   computeNotifyAtFromOffset,
@@ -380,13 +380,12 @@ export default function ScheduleModal({ startDate: initialStartDate, endDate: in
             )}
           </div>
 
-          <div className="schedule-modal-field" data-color-mode="light">
-            <label className="form-label">상세 내용 (마크다운)</label>
-            <MDEditor
+          <div className="schedule-modal-field">
+            <label className="form-label">상세 내용</label>
+            <MarkdownEditor
               value={description}
-              onChange={val => setDescription(val || '')}
+              onChange={setDescription}
               height={200}
-              preview="edit"
             />
           </div>
 
