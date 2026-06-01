@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { taskCache, calendarCache, categoryCache, scheduleCache, holidayCache, updateTaskInAllCaches, removeTaskFromAllCaches, getCalendarFromMemoryCacheSync } from './cache';
+import { taskCache, calendarCache, categoryCache, scheduleCache, holidayCache, updateTaskInAllCaches, removeTaskFromAllCaches, getTaskFromAllCaches, getCalendarFromMemoryCacheSync } from './cache';
 import { v4 as uuidv4 } from 'uuid';
 import { setSyncStatus } from '../components/common/SyncIndicator';
 import { buildTaskTree } from '../utils/taskUtils';
@@ -307,6 +307,16 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
       });
     if (error) throw error;
   });
+
+  // 이미 완료 처리된 상위작업에 새 하위작업이 추가되면, 더 이상 모든 하위작업이
+  // 완료된 상태가 아니므로 상위작업의 완료를 자동으로 해제합니다. (요구사항: 완료 후
+  // 하위작업을 추가하면 상위작업은 다시 완료해제되어야 함)
+  if (newTask.parent_id) {
+    const parent = await getTaskFromAllCaches(newTask.parent_id);
+    if (parent && parent.status === 'completed') {
+      await uncompleteTask(parent.id);
+    }
+  }
 
   void rescheduleDailySummariesOnly().catch(console.error);
   return newTask;
