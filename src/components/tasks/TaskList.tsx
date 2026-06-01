@@ -1,7 +1,7 @@
 import type { Task, TaskStatus } from '../../types';
 import TaskTree from './TaskTree';
 import TaskInput from './TaskInput';
-import { calculateStatusSummary, getLeafTasks, filterTasksByStatus, getEffectiveStatus } from '../../utils/taskUtils';
+import { calculateStatusSummary, getLeafTasks, filterTasksByStatus, filterActiveTasks, getEffectiveStatus } from '../../utils/taskUtils';
 import { useState, useMemo, useCallback } from 'react';
 import './Tasks.css';
 
@@ -64,16 +64,20 @@ export default function TaskList({
   onCreateSnapshot, onDeleteSnapshot, onSetFavorite, isHistory, sortByStatus
 }: TaskListProps) {
   const [viewMode, setViewMode] = useState<'tree' | 'leaf'>('tree');
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | null>(null);
+  // `active` is a virtual filter that hides terminal (완료/폐기) tasks — the
+  // common "show only what's left" view. Otherwise a single status is matched.
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'active' | null>(null);
   const summary = useMemo(() => calculateStatusSummary(tasks), [tasks]);
+  const activeCount = summary.pending + summary.inProgress;
 
-  const toggleFilter = useCallback((status: TaskStatus) => {
+  const toggleFilter = useCallback((status: TaskStatus | 'active') => {
     setStatusFilter((prev) => prev === status ? null : status);
   }, []);
 
   const displayTasks = useMemo(() => {
     const base = viewMode === 'tree' ? tasks : getLeafTasks(tasks);
     if (!statusFilter) return base;
+    if (statusFilter === 'active') return filterActiveTasks(base);
     return filterTasksByStatus(base, statusFilter);
   }, [viewMode, tasks, statusFilter]);
 
@@ -87,6 +91,16 @@ export default function TaskList({
       {/* Summary bar */}
       {tasks.length > 0 && (
         <div className="task-list-summary" style={{ marginBottom: 'var(--space-md)' }}>
+          {(summary.completed > 0 || summary.discarded > 0) && (
+            <button
+              type="button"
+              className={`task-list-count badge badge-active ${statusFilter === 'active' ? 'badge-filter-active' : ''}`}
+              onClick={() => toggleFilter('active')}
+              title="완료·폐기를 제외한 남은 작업만 보기"
+            >
+              남은 작업 {activeCount}
+            </button>
+          )}
           <button
             type="button"
             className={`task-list-count badge badge-completed ${statusFilter === 'completed' ? 'badge-filter-active' : ''}`}
@@ -154,7 +168,7 @@ export default function TaskList({
       {statusFilter && (
         <div className="filter-indicator" style={{ marginBottom: 'var(--space-sm)', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-            필터: {statusFilter === 'completed' ? '완료' : statusFilter === 'in_progress' ? '진행' : statusFilter === 'pending' ? '대기' : '폐기'}
+            필터: {statusFilter === 'active' ? '남은 작업' : statusFilter === 'completed' ? '완료' : statusFilter === 'in_progress' ? '진행' : statusFilter === 'pending' ? '대기' : '폐기'}
           </span>
           <button
             type="button"

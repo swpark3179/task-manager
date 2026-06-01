@@ -605,20 +605,6 @@ body:has(.dashboard-page),
   border: 1px dashed var(--border-2);
   border-radius: 8px;
 }
-.dashboard-page .detail-edit {
-  width: 100%;
-  min-height: 90px;
-  background: var(--bg);
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  padding: 9px 11px;
-  font: inherit;
-  font-size: 12.5px;
-  color: var(--fg);
-  outline: none;
-  resize: vertical;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
-}
 .dashboard-page .detail-act {
   display: flex;
   gap: 6px;

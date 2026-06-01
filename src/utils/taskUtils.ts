@@ -184,6 +184,28 @@ export function getLeafTasks(tasks: Task[]): Task[] {
   return result;
 }
 
+// Keeps only tasks that are still "live" — i.e. not completed and not
+// discarded — so the list can hide finished noise. Mirrors filterTasksByStatus:
+// a parent is kept when any descendant is still active, even if the parent's
+// own effective status reads terminal.
+export function filterActiveTasks(tasks: Task[]): Task[] {
+  const isActive = (status: TaskStatus) => status === 'pending' || status === 'in_progress';
+  const result: Task[] = [];
+  for (const task of tasks) {
+    if (task.children && task.children.length > 0) {
+      const filteredChildren = filterActiveTasks(task.children);
+      if (filteredChildren.length > 0) {
+        result.push({ ...task, children: filteredChildren });
+      } else if (isActive(getEffectiveStatus(task))) {
+        result.push({ ...task, children: [] });
+      }
+    } else if (isActive(getEffectiveStatus(task))) {
+      result.push(task);
+    }
+  }
+  return result;
+}
+
 export function filterTasksByStatus(tasks: Task[], status: TaskStatus): Task[] {
   const result: Task[] = [];
   for (const task of tasks) {

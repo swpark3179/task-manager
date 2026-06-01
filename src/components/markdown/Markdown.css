@@ -28,3 +28,139 @@
   max-width: 100%;
   height: auto;
 }
+
+/* =============================================
+   Lightweight, token-based Markdown editor
+   Mobile-first: large touch targets, scrollable
+   toolbar, theme-aware via design tokens.
+   ============================================= */
+.md-editor {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  overflow: hidden;
+}
+.md-editor:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.md-editor-fill {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+.md-editor-fill .md-editor-body { flex: 1; min-height: 0; }
+.md-editor-fill .md-editor-textarea { height: 100%; resize: none; }
+
+.md-editor-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-1) var(--space-2);
+}
+
+.md-editor-modes {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--bg-4);
+  border-radius: var(--r-sm);
+  padding: 2px;
+  align-self: flex-start;
+}
+.md-editor-mode {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: 6px 14px;
+  min-height: 32px;
+  border-radius: var(--r-xs);
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+.md-editor-mode.is-on {
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: var(--shadow-1);
+}
+
+.md-editor-tools {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 1px;
+}
+.md-editor-tools::-webkit-scrollbar { display: none; }
+.md-editor-tool {
+  appearance: none;
+  flex: 0 0 auto;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--fg-2);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  white-space: nowrap;
+}
+.md-editor-tool:hover { background: var(--bg-3); color: var(--fg); }
+.md-editor-tool:active { transform: translateY(1px); }
+.md-editor-tool-b { font-weight: 800; }
+.md-editor-tool-i { font-style: italic; }
+.md-editor-tool-code { font-family: var(--font-mono); }
+
+.md-editor-body {
+  display: flex;
+  background: var(--bg);
+}
+.md-editor-textarea {
+  flex: 1;
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: vertical;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  /* 16px keeps iOS from auto-zooming the page on focus. */
+  font-size: 16px;
+  line-height: var(--lh-normal);
+  padding: var(--space-3);
+}
+.md-editor-textarea::placeholder { color: var(--fg-3); }
+
+.md-editor-preview {
+  flex: 1;
+  padding: var(--space-3);
+  overflow-y: auto;
+}
+.md-editor-preview-empty {
+  color: var(--fg-3);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+
+@media (min-width: 768px) {
+  .md-editor-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .md-editor-textarea { font-size: var(--text-base); }
+  .md-editor-tool { min-width: 34px; min-height: 32px; }
+  .md-editor-mode { min-height: 28px; padding: 4px 12px; }
+}
