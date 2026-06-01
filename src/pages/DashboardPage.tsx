@@ -3,12 +3,19 @@ import { useDayTasks } from '../hooks/useDayTasks';
 import { hideDashboard, openFullApp } from '../lib/windowCommands';
 import { getCurrentTauriWindow } from '../lib/runtimeWindow';
 import { getTodayString } from '../utils/dateUtils';
-import { calculateStatusSummary, getEffectiveStatus, hasChildren } from '../utils/taskUtils';
+import {
+  calculateStatusSummary,
+  getEffectiveStatus,
+  getLeafTasks,
+  getStatusLabel,
+  hasChildren,
+} from '../utils/taskUtils';
 import {
   createSchedule,
   deleteSchedule,
   fetchHolidays,
   fetchSchedulesForDateRange,
+  fetchTasksByDate,
   forceSync,
 } from '../lib/database';
 import { getHolidaysForDate } from '../utils/koreanHolidays';
@@ -19,8 +26,21 @@ import { openDetailWindow } from '../lib/detailWindow';
 import './DashboardPage.css';
 
 type FilterKey = 'all' | 'active' | 'in_progress' | 'pending' | 'completed' | 'discarded';
+type ViewMode = 'tree' | 'leaf';
+type ParentInfo = NonNullable<Task['parent_info']>;
 
 const KOR_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+function findTaskInTree(tasks: Task[], id: string): Task | null {
+  for (const t of tasks) {
+    if (t.id === id) return t;
+    if (t.children?.length) {
+      const found = findTaskInTree(t.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
 
 function formatTodayHeader(iso: string): string {
   const d = new Date(iso + 'T00:00:00');
@@ -173,6 +193,36 @@ function CalendarIcon() {
     </svg>
   );
 }
+function LinkIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <polyline points="15 3 21 3 21 9" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="10" y1="14" x2="21" y2="3" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function TreeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </svg>
+  );
+}
+function ListIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  );
+}
 function SyncIcon({ spinning }: { spinning?: boolean }) {
   return (
     <svg
@@ -208,6 +258,7 @@ function TaskNode({
   onCreateSnapshot,
   onDeleteSnapshot,
   onOpenDetailPopup,
+  onOpenParentPopup,
   onDiscard,
   onUndiscard,
 }: {
@@ -224,6 +275,7 @@ function TaskNode({
   onCreateSnapshot: (id: string) => Promise<void>;
   onDeleteSnapshot: (id: string) => Promise<void>;
   onOpenDetailPopup: (task: Task) => void;
+  onOpenParentPopup: (info: ParentInfo) => void;
   onDiscard: (id: string) => Promise<void>;
   onUndiscard: (id: string) => Promise<void>;
 }) {
@@ -343,6 +395,21 @@ function TaskNode({
             </span>
           </span>
         </button>
+        {task.parent_info && (
+          <button
+            type="button"
+            className="parent-link"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenParentPopup(task.parent_info!);
+            }}
+            title={`상위 작업: ${task.parent_info.title} (${task.parent_info.created_date})`}
+            aria-label="상위 작업 정보 보기"
+          >
+            <LinkIcon />
+            <span className="parent-link-txt">상위</span>
+          </button>
+        )}
         <div className="row-actions">
           {depth === 0 && !task.is_snapshot && (
             <button
@@ -526,6 +593,7 @@ function TaskNode({
                   onCreateSnapshot={onCreateSnapshot}
                   onDeleteSnapshot={onDeleteSnapshot}
                   onOpenDetailPopup={onOpenDetailPopup}
+                  onOpenParentPopup={onOpenParentPopup}
                   onDiscard={onDiscard}
                   onUndiscard={onUndiscard}
                 />
@@ -870,16 +938,180 @@ function EventsPane({ today, reloadKey = 0 }: { today: string; reloadKey?: numbe
   );
 }
 
+function ViewModeToggle({
+  value,
+  onChange,
+}: {
+  value: ViewMode;
+  onChange: (mode: ViewMode) => void;
+}) {
+  return (
+    <div className="view-toggle" role="group" aria-label="보기 모드">
+      <button
+        type="button"
+        className={`view-toggle-btn ${value === 'tree' ? 'on' : ''}`}
+        onClick={() => onChange('tree')}
+        title="트리 보기 — 상위작업부터"
+        aria-label="트리 보기"
+        aria-pressed={value === 'tree'}
+      >
+        <TreeIcon />
+      </button>
+      <button
+        type="button"
+        className={`view-toggle-btn ${value === 'leaf' ? 'on' : ''}`}
+        onClick={() => onChange('leaf')}
+        title="최하위 작업 기준 보기"
+        aria-label="최하위 작업 보기"
+        aria-pressed={value === 'leaf'}
+      >
+        <ListIcon />
+      </button>
+    </div>
+  );
+}
+
+function ParentTaskPopup({
+  info,
+  task,
+  loading,
+  today,
+  onClose,
+  onOpenDate,
+}: {
+  info: ParentInfo;
+  task: Task | null;
+  loading: boolean;
+  today: string;
+  onClose: () => void;
+  onOpenDate: (date: string) => void;
+}) {
+  const status = task ? getEffectiveStatus(task) : null;
+  const childCount = task?.children?.length ?? 0;
+  const doneChildren = (task?.children || []).filter(
+    (c) => getEffectiveStatus(c) === 'completed',
+  ).length;
+  const statusClass: 'done' | 'doing' | 'todo' | 'discarded' =
+    status === 'completed'
+      ? 'done'
+      : status === 'discarded'
+      ? 'discarded'
+      : status === 'in_progress'
+      ? 'doing'
+      : 'todo';
+
+  return (
+    <div className="parent-pop-overlay" onClick={onClose}>
+      <div
+        className="parent-pop"
+        role="dialog"
+        aria-label="상위 작업 정보"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="parent-pop-head">
+          <span className="parent-pop-eyebrow">상위 작업</span>
+          <button
+            type="button"
+            className="iconbtn iconbtn-sm"
+            onClick={onClose}
+            aria-label="닫기"
+            title="닫기"
+          >
+            <XmarkIcon />
+          </button>
+        </div>
+
+        <div className="parent-pop-title">{task?.title || info.title || '제목 없음'}</div>
+
+        <div className="parent-pop-meta">
+          <button
+            type="button"
+            className="parent-pop-date"
+            onClick={() => onOpenDate(info.created_date)}
+            title={`${info.created_date} 열기`}
+          >
+            <CalendarIcon />
+            <span>{formatDayLabel(info.created_date, today)}</span>
+            <span className="parent-pop-date-iso">{info.created_date}</span>
+          </button>
+          {status && (
+            <span className={`parent-pop-status st-${statusClass}`}>
+              {getStatusLabel(status)}
+            </span>
+          )}
+          {childCount > 0 && (
+            <span className="parent-pop-cnt">
+              {doneChildren}/{childCount}
+            </span>
+          )}
+        </div>
+
+        <div className="parent-pop-body">
+          {loading ? (
+            <div className="md-empty">불러오는 중…</div>
+          ) : task?.description && task.description.trim() ? (
+            <div className="md">
+              <MarkdownViewer content={task.description} />
+            </div>
+          ) : (
+            <div className="md-empty">상세 내용 없음</div>
+          )}
+        </div>
+
+        <div className="parent-pop-foot">
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            onClick={() => onOpenDate(info.created_date)}
+          >
+            <ExternalIcon /> 해당 날짜 열기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const today = getTodayString();
   const dayTasks = useDayTasks(today);
   const [newTitle, setNewTitle] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [tab, setTab] = useState<'tasks' | 'schedules' | 'events' | 'later'>('tasks');
   const [scheduleCount, setScheduleCount] = useState<number | null>(null);
   const [eventCount, setEventCount] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [parentPopup, setParentPopup] = useState<{
+    info: ParentInfo;
+    task: Task | null;
+    loading: boolean;
+  } | null>(null);
+
+  const openParentPopup = useCallback(async (info: ParentInfo) => {
+    setParentPopup({ info, task: null, loading: true });
+    try {
+      const data = await fetchTasksByDate(info.created_date);
+      const found = findTaskInTree(data, info.id);
+      setParentPopup((prev) =>
+        prev && prev.info.id === info.id ? { info, task: found, loading: false } : prev,
+      );
+    } catch (err) {
+      console.error('Failed to load parent task:', err);
+      setParentPopup((prev) =>
+        prev && prev.info.id === info.id ? { ...prev, loading: false } : prev,
+      );
+    }
+  }, []);
+
+  const handleOpenParentDate = useCallback(
+    (date: string) => {
+      void openFullApp(date === today ? '/' : `/history/${date}`);
+      setParentPopup(null);
+    },
+    [today],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -912,35 +1144,27 @@ export default function DashboardPage() {
     void dayTasks.setFavorite(id, value);
   }, [dayTasks]);
 
-  const visibleRoots = useMemo(() => {
-    const filtered = filter === 'all'
-      ? mainTasks
-      : mainTasks.filter((t) => matchesFilter(t, filter));
-    const fav: Task[] = [];
-    const rest: Task[] = [];
-    for (const t of filtered) {
-      const status = getEffectiveStatus(t);
-      const isTerminal = status === 'completed' || status === 'discarded';
-      if (t.is_favorite && !isTerminal) fav.push(t);
-      else rest.push(t);
-    }
-    return [...sortTasksByStatus(fav), ...sortTasksByStatus(rest)];
-  }, [mainTasks, filter]);
+  // 트리 보기는 상위작업부터, 최하위 보기(leaf)는 가장 하위 작업만 평탄화해서 보여준다.
+  const buildVisible = useCallback(
+    (source: Task[]) => {
+      const base = viewMode === 'leaf' ? getLeafTasks(source) : source;
+      const filtered = filter === 'all' ? base : base.filter((t) => matchesFilter(t, filter));
+      const fav: Task[] = [];
+      const rest: Task[] = [];
+      for (const t of filtered) {
+        const status = getEffectiveStatus(t);
+        const isTerminal = status === 'completed' || status === 'discarded';
+        // 즐겨찾기 상단 고정은 트리 보기(최상위 작업)에서만 의미가 있다.
+        if (viewMode === 'tree' && t.is_favorite && !isTerminal) fav.push(t);
+        else rest.push(t);
+      }
+      return [...sortTasksByStatus(fav), ...sortTasksByStatus(rest)];
+    },
+    [viewMode, filter],
+  );
 
-  const laterVisible = useMemo(() => {
-    const filtered = filter === 'all'
-      ? laterTasks
-      : laterTasks.filter((t) => matchesFilter(t, filter));
-    const fav: Task[] = [];
-    const rest: Task[] = [];
-    for (const t of filtered) {
-      const status = getEffectiveStatus(t);
-      const isTerminal = status === 'completed' || status === 'discarded';
-      if (t.is_favorite && !isTerminal) fav.push(t);
-      else rest.push(t);
-    }
-    return [...sortTasksByStatus(fav), ...sortTasksByStatus(rest)];
-  }, [laterTasks, filter]);
+  const visibleRoots = useMemo(() => buildVisible(mainTasks), [buildVisible, mainTasks]);
+  const laterVisible = useMemo(() => buildVisible(laterTasks), [buildVisible, laterTasks]);
 
   const addTask = async (e: FormEvent) => {
     e.preventDefault();
@@ -1169,6 +1393,7 @@ export default function DashboardPage() {
                   {f.l} <span className="filter-n">{f.n}</span>
                 </button>
               ))}
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
             </div>
             <div className="list">
               {dayTasks.loading && laterTasks.length === 0 && (
@@ -1202,6 +1427,7 @@ export default function DashboardPage() {
                   onCreateSnapshot={dayTasks.createSnapshot}
                   onDeleteSnapshot={dayTasks.deleteSnapshot}
                   onOpenDetailPopup={(t) => void openDetailWindow(t.id, today)}
+                  onOpenParentPopup={openParentPopup}
                   onDiscard={dayTasks.discard}
                   onUndiscard={dayTasks.undiscard}
                 />
@@ -1234,6 +1460,7 @@ export default function DashboardPage() {
                 {f.l} <span className="filter-n">{f.n}</span>
               </button>
             ))}
+            <ViewModeToggle value={viewMode} onChange={setViewMode} />
           </div>
 
           <div className="list">
@@ -1266,6 +1493,7 @@ export default function DashboardPage() {
                 onCreateSnapshot={dayTasks.createSnapshot}
                 onDeleteSnapshot={dayTasks.deleteSnapshot}
                 onOpenDetailPopup={(t) => void openDetailWindow(t.id, today)}
+                onOpenParentPopup={openParentPopup}
                 onDiscard={dayTasks.discard}
                 onUndiscard={dayTasks.undiscard}
               />
@@ -1274,6 +1502,17 @@ export default function DashboardPage() {
         </div>
         )}
       </div>
+
+      {parentPopup && (
+        <ParentTaskPopup
+          info={parentPopup.info}
+          task={parentPopup.task}
+          loading={parentPopup.loading}
+          today={today}
+          onClose={() => setParentPopup(null)}
+          onOpenDate={handleOpenParentDate}
+        />
+      )}
     </main>
   );
 }
