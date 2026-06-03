@@ -42,6 +42,19 @@ function getTaskChannel(): BroadcastChannel | null {
   }
 }
 
+// Apply a status change to a single task within the (possibly nested) tree,
+// returning a new tree. Parent rows recompute their effective status from the
+// updated child, so we only need to touch the directly toggled task.
+function applyOptimisticUpdate(tasks: Task[], id: string, updates: Partial<Task>): Task[] {
+  return tasks.map((task) => {
+    if (task.id === id) return { ...task, ...updates };
+    if (task.children && task.children.length > 0) {
+      return { ...task, children: applyOptimisticUpdate(task.children, id, updates) };
+    }
+    return task;
+  });
+}
+
 export interface UseDayTasksResult {
   tasks: Task[];
   loading: boolean;
@@ -122,7 +135,17 @@ export function useDayTasks(date: string): UseDayTasksResult {
     };
   }, [date, refreshTasks]);
 
-  const mutate = useCallback(async (action: () => Promise<unknown>, errorMessage: string) => {
+  const mutate = useCallback(async (
+    action: () => Promise<unknown>,
+    errorMessage: string,
+    optimistic?: (prev: Task[]) => Task[],
+  ) => {
+    // 즉각적인 UI 반응을 위해 React 상태를 먼저 낙관적으로 갱신한다. IndexedDB 쓰기,
+    // 캐시 무효화, 재조회(다른 날짜로 이관된 작업은 상위 정보 보강을 위한 네트워크
+    // 왕복까지)는 그 뒤에 일어나므로, 느린 환경에서도 체크 표시가 곧바로 반영된다.
+    if (optimistic) {
+      setTasks((prev) => optimistic(prev));
+    }
     try {
       await action();
       await refreshTasks();
@@ -144,6 +167,10 @@ export function useDayTasks(date: string): UseDayTasksResult {
       }
     } catch (err) {
       console.error(errorMessage, err);
+      // 낙관적 갱신을 적용했다면 캐시(=권위 있는 상태) 기준으로 되돌린다.
+      if (optimistic) {
+        void refreshTasks();
+      }
     }
   }, [date, refreshTasks]);
 
@@ -185,19 +212,50 @@ export function useDayTasks(date: string): UseDayTasksResult {
   }, [mutate]);
 
   const complete = useCallback(async (id: string) => {
-    await mutate(() => completeTask(id), 'Task action failed:');
+    await mutate(
+      () => completeTask(id),
+      'Task action failed:',
+      (prev) => applyOptimisticUpdate(prev, id, {
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        is_favorite: false,
+        has_snapshot: false,
+      }),
+    );
   }, [mutate]);
 
   const uncomplete = useCallback(async (id: string) => {
-    await mutate(() => uncompleteTask(id), 'Task action failed:');
+    await mutate(
+      () => uncompleteTask(id),
+      'Task action failed:',
+      (prev) => applyOptimisticUpdate(prev, id, {
+        status: 'pending',
+        completed_at: null,
+      }),
+    );
   }, [mutate]);
 
   const discard = useCallback(async (id: string) => {
-    await mutate(() => discardTask(id), 'Task action failed:');
+    await mutate(
+      () => discardTask(id),
+      'Task action failed:',
+      (prev) => applyOptimisticUpdate(prev, id, {
+        status: 'discarded',
+        discarded_at: new Date().toISOString(),
+        is_favorite: false,
+      }),
+    );
   }, [mutate]);
 
   const undiscard = useCallback(async (id: string) => {
-    await mutate(() => undiscardTask(id), 'Task action failed:');
+    await mutate(
+      () => undiscardTask(id),
+      'Task action failed:',
+      (prev) => applyOptimisticUpdate(prev, id, {
+        status: 'pending',
+        discarded_at: null,
+      }),
+    );
   }, [mutate]);
 
   const setFavorite = useCallback(async (id: string, value: boolean) => {
