@@ -26,6 +26,35 @@ export const SYNC_INTERVAL_OPTIONS = [
 
 let autoSyncTimer: ReturnType<typeof setInterval> | null = null;
 
+// 전체 동기화 최대 허용 시간. 모바일에서 네트워크가 멈추면 Supabase fetch가
+// 무한정 대기할 수 있는데, 그동안 SyncBlocker 오버레이가 화면을 막아 앱이
+// 멈춘 것처럼 보인다. 이 시간이 지나면 강제로 실패 처리해 오버레이를 해제한다.
+const FULL_SYNC_TIMEOUT_MS = 45000;
+
+class SyncTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`Full sync timed out after ${ms}ms`);
+    this.name = 'SyncTimeoutError';
+  }
+}
+
+/** 주어진 Promise가 ms 안에 끝나지 않으면 거부한다. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new SyncTimeoutError(ms)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 // =============================================
 // Last Sync Time Helpers
 // =============================================
@@ -86,6 +115,30 @@ async function getCurrentUserId(): Promise<string> {
 export async function performFullSync(): Promise<void> {
   setSyncStatus('syncing');
   try {
+    // 네트워크가 멈춰 동기화가 영원히 끝나지 않는 일을 막기 위해 전체 작업에
+    // 타임아웃을 건다. 타임아웃되면 아래 catch로 떨어져 상태가 'error'가 되고
+    // SyncBlocker 오버레이가 즉시 해제된다.
+    await withTimeout(runFullSyncBody(), FULL_SYNC_TIMEOUT_MS);
+
+    setLastSyncTime();
+    setSyncStatus('synced');
+
+    // 동기화 완료 후 로컬 알림 재예약 (백그라운드)
+    void rescheduleAll().catch((err) => {
+      console.error('[SyncManager] reschedule notifications failed:', err);
+    });
+  } catch (err) {
+    console.error('[SyncManager] Full sync failed:', err);
+    setSyncStatus('error');
+    throw err;
+  }
+}
+
+/**
+ * 실제 네트워크/캐시 동기화 본문. performFullSync가 타임아웃과 함께 호출한다.
+ */
+async function runFullSyncBody(): Promise<void> {
+  {
     // 낙관적 업데이트로 시작된 백그라운드 푸시가 끝나길 기다린다.
     // 그렇지 않으면 서버에서 옛 데이터를 읽어와 로컬 변경분을 덮어쓰는
     // 레이스가 발생할 수 있다.
@@ -264,18 +317,6 @@ export async function performFullSync(): Promise<void> {
       startDate,
       endDate
     );
-
-    setLastSyncTime();
-    setSyncStatus('synced');
-
-    // 동기화 완료 후 로컬 알림 재예약 (백그라운드)
-    void rescheduleAll().catch((err) => {
-      console.error('[SyncManager] reschedule notifications failed:', err);
-    });
-  } catch (err) {
-    console.error('[SyncManager] Full sync failed:', err);
-    setSyncStatus('error');
-    throw err;
   }
 }
 
