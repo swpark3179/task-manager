@@ -1,6 +1,5 @@
 import { memo, useEffect, useRef } from 'react';
 import MDEditor from '@uiw/react-md-editor';
-import { useColorMode } from './useColorMode';
 import './Markdown.css';
 
 interface MarkdownViewerProps {
@@ -32,7 +31,6 @@ function hasMermaidBlock(content: string): boolean {
 
 function MarkdownViewer({ content }: MarkdownViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const colorMode = useColorMode();
 
   // Render mermaid diagrams after markdown is rendered. Skip entirely when the
   // content has no mermaid fence so the common case does no extra work, sets no
@@ -75,8 +73,13 @@ function MarkdownViewer({ content }: MarkdownViewerProps) {
     };
   }, [content]);
 
+  // Always render in a self-contained, Claude-web–style light theme. The viewer
+  // surfaces (e.g. the Windows detail popup) hardcode a light background, so
+  // following the app's dark `--fg`/`data-color-mode` produced near-white text
+  // on white — unreadable. Pinning a light "paper" theme keeps the markdown
+  // crisp and high-contrast regardless of the app's current color mode.
   return (
-    <div className="markdown-viewer" ref={containerRef} data-color-mode={colorMode}>
+    <div className="markdown-viewer claude-theme" ref={containerRef} data-color-mode="light">
       <MDEditor.Markdown source={content} />
     </div>
   );

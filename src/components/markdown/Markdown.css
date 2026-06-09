@@ -17,6 +17,115 @@
   padding: 0 !important;
 }
 
+/* =============================================
+   Claude web–style Markdown theme
+   ---------------------------------------------
+   A clean, light "paper" surface that stays
+   readable regardless of the app's dark mode.
+   Mirrors the look of markdown on claude.ai:
+   warm neutral text, clay accent, soft borders,
+   and a dark code surface. These rules win over
+   the global `.wmde-markdown` overrides in
+   index.css via higher specificity + !important.
+   ============================================= */
+.markdown-viewer.claude-theme {
+  --cl-bg:           #ffffff;
+  --cl-fg:           #2a2a27;
+  --cl-fg-muted:     #6b6a63;
+  --cl-heading:      #1a1915;
+  --cl-border:       #e7e4da;
+  --cl-accent:       #c15f3c;
+  --cl-code-bg:      #f3f1ea;
+  --cl-code-fg:      #b14b2c;
+  --cl-pre-bg:       #2b2a27;
+  --cl-pre-fg:       #ebe9df;
+  --cl-quote-fg:     #57564f;
+  --cl-quote-border: #d9d6cb;
+  --cl-table-head:   #f7f6f1;
+
+  background: var(--cl-bg);
+  color: var(--cl-fg);
+  border: 1px solid var(--cl-border);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+
+.markdown-viewer.claude-theme .wmde-markdown {
+  color: var(--cl-fg) !important;
+  font-family: var(--font-sans, inherit) !important;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  /* github-markdown variables for parts not overridden explicitly below */
+  --color-canvas-default: var(--cl-bg);
+  --color-fg-default: var(--cl-fg);
+  --color-fg-muted: var(--cl-fg-muted);
+  --color-border-default: var(--cl-border);
+  --color-border-muted: var(--cl-border);
+  --color-accent-fg: var(--cl-accent);
+  /* Syntax-highlight tokens, tuned for the dark code surface */
+  --color-prettylights-syntax-comment: #9a988d;
+  --color-prettylights-syntax-keyword: #e0996b;
+  --color-prettylights-syntax-string: #b6c98b;
+  --color-prettylights-syntax-constant: #d9a0e0;
+  --color-prettylights-syntax-entity: #8fc7e6;
+  --color-prettylights-syntax-variable: #e6b673;
+}
+
+.markdown-viewer.claude-theme .wmde-markdown h1,
+.markdown-viewer.claude-theme .wmde-markdown h2,
+.markdown-viewer.claude-theme .wmde-markdown h3,
+.markdown-viewer.claude-theme .wmde-markdown h4,
+.markdown-viewer.claude-theme .wmde-markdown h5,
+.markdown-viewer.claude-theme .wmde-markdown h6 {
+  color: var(--cl-heading) !important;
+  border-bottom-color: var(--cl-border) !important;
+}
+
+.markdown-viewer.claude-theme .wmde-markdown a {
+  color: var(--cl-accent) !important;
+}
+
+.markdown-viewer.claude-theme .wmde-markdown code {
+  background: var(--cl-code-bg) !important;
+  color: var(--cl-code-fg) !important;
+  border-radius: 5px !important;
+  padding: 0.15em 0.4em !important;
+  font-size: 0.875em !important;
+}
+
+.markdown-viewer.claude-theme .wmde-markdown pre {
+  background: var(--cl-pre-bg) !important;
+  border-radius: 10px !important;
+  padding: 14px 16px !important;
+}
+.markdown-viewer.claude-theme .wmde-markdown pre code {
+  background: transparent !important;
+  color: var(--cl-pre-fg) !important;
+  padding: 0 !important;
+  font-size: 0.85em !important;
+}
+
+.markdown-viewer.claude-theme .wmde-markdown blockquote {
+  color: var(--cl-quote-fg) !important;
+  border-left-color: var(--cl-quote-border) !important;
+}
+
+.markdown-viewer.claude-theme .wmde-markdown hr {
+  background-color: var(--cl-border) !important;
+}
+
+.markdown-viewer.claude-theme .wmde-markdown table tr {
+  background: transparent !important;
+  border-top-color: var(--cl-border) !important;
+}
+.markdown-viewer.claude-theme .wmde-markdown table th,
+.markdown-viewer.claude-theme .wmde-markdown table td {
+  border-color: var(--cl-border) !important;
+}
+.markdown-viewer.claude-theme .wmde-markdown table th {
+  background: var(--cl-table-head) !important;
+}
+
 .mermaid-diagram {
   display: flex;
   justify-content: center;
