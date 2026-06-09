@@ -31,6 +31,32 @@ type ParentInfo = NonNullable<Task['parent_info']>;
 
 const KOR_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy path */
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 function findTaskInTree(tasks: Task[], id: string): Task | null {
   for (const t of tasks) {
     if (t.id === id) return t;
@@ -288,6 +314,15 @@ function TaskNode({
   const [detailDraft, setDetailDraft] = useState(task.description ?? '');
   const [adding, setAdding] = useState(false);
   const [childInput, setChildInput] = useState('');
+  const [titleCopied, setTitleCopied] = useState(false);
+
+  const handleCopyTitle = async () => {
+    const ok = await copyToClipboard(task.title || '');
+    if (ok) {
+      setTitleCopied(true);
+      window.setTimeout(() => setTitleCopied(false), 1200);
+    }
+  };
 
   useEffect(() => {
     setTitleDraft(task.title);
@@ -493,6 +528,19 @@ function TaskNode({
 
           {view === 'detail' && (
             <div className="detail">
+              <button
+                type="button"
+                className={`detail-title ${titleCopied ? 'detail-title-copied' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleCopyTitle();
+                }}
+                title="클릭해서 제목 복사"
+                aria-label="작업 제목 복사"
+              >
+                <span className="detail-title-txt">{task.title || '제목 없음'}</span>
+                <span className="detail-title-hint">{titleCopied ? '복사됨!' : '복사'}</span>
+              </button>
               {editingDetail ? (
                 <>
                   <MarkdownEditor
