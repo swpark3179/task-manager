@@ -113,6 +113,13 @@ async function getCurrentUserId(): Promise<string> {
  * 조회 범위: 오늘 기준 ±3개월
  */
 export async function performFullSync(): Promise<void> {
+  // 오프라인이면 45초 타임아웃을 기다릴 필요 없이 즉시 실패 처리한다.
+  // (모바일에서 네트워크가 끊긴 채 동기화를 누르면 오버레이가 오래 떠 있는 걸 막는다.)
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    setSyncStatus('offline');
+    throw new Error('Offline: cannot sync');
+  }
+
   setSyncStatus('syncing');
   try {
     // 네트워크가 멈춰 동기화가 영원히 끝나지 않는 일을 막기 위해 전체 작업에

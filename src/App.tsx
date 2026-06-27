@@ -13,6 +13,7 @@ import DashboardPage from './pages/DashboardPage';
 import ActivityReportPage from './pages/ActivityReportPage';
 import DetailPage from './pages/DetailPage';
 import SyncBlocker from './components/common/SyncBlocker';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import { isMobilePlatform } from './lib/runtimeWindow';
 import './index.css';
 
@@ -67,10 +68,12 @@ export default function App() {
   return (
     <HashRouter>
       <AppearanceProvider>
-        <AuthProvider>
-          <AppRoutes />
-          <SyncBlocker />
-        </AuthProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <AppRoutes />
+            <SyncBlocker />
+          </AuthProvider>
+        </ErrorBoundary>
       </AppearanceProvider>
     </HashRouter>
   );
