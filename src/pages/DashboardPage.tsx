@@ -32,6 +32,17 @@ type ParentInfo = NonNullable<Task['parent_info']>;
 
 const KOR_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
+// @tauri-apps/api 의 ResizeDirection 과 동일한 문자열 유니온(해당 타입은 export 되지 않음).
+type ResizeDirection =
+  | 'North'
+  | 'South'
+  | 'East'
+  | 'West'
+  | 'NorthEast'
+  | 'NorthWest'
+  | 'SouthEast'
+  | 'SouthWest';
+
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
     if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
@@ -1253,86 +1264,24 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // 위젯(불투명 영역) 테두리에 맞춘 크기 조절 핸들. 투명 패딩이 아닌 흰색
-  // 위젯의 가장자리에서부터 리사이즈가 시작되도록 8방향 핸들을 직접 구현한다.
-  // (네이티브 리사이즈는 창 바깥쪽 투명 영역에서 동작해 인지되는 테두리와
-  // 어긋나므로, tauri.conf.json 에서 resizable:false 로 끄고 여기서 처리한다.)
+  // 위젯(불투명 영역) 테두리에 맞춘 크기 조절 핸들.
+  // 네이티브 리사이즈 보더는 창의 실제 가장자리(투명 영역)에만 좁게 존재해
+  // 인지되는 흰색 테두리와 어긋난다. 위젯 가장자리에 붙인 핸들에서 OS 네이티브
+  // 리사이즈(startResizeDragging)를 띄워, 투명 패딩 안쪽까지 리사이즈 영역을
+  // 위젯 가장자리까지 끌어온다. (네이티브 리사이즈를 쓰므로 resizable:true 유지.)
   const startEdgeResize = useCallback(
-    (dir: 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw') =>
-      async (e: React.MouseEvent) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const w = await getCurrentTauriWindow();
-        if (!w) return;
-        try {
-          const { PhysicalPosition, PhysicalSize } = await import('@tauri-apps/api/dpi');
-          const startScreenX = e.screenX;
-          const startScreenY = e.screenY;
-          const [startPos, startSize, scaleFactor] = await Promise.all([
-            w.outerPosition(),
-            w.outerSize(),
-            w.scaleFactor(),
-          ]);
-          const minWidthPhysical = Math.round(360 * scaleFactor);
-          const minHeightPhysical = Math.round(320 * scaleFactor);
-          const north = dir.includes('n');
-          const south = dir.includes('s');
-          const east = dir.includes('e');
-          const west = dir.includes('w');
-
-          let pending = false;
-          let latestDx = 0;
-          let latestDy = 0;
-
-          const apply = async () => {
-            if (pending) return;
-            pending = true;
-            const dx = Math.round(latestDx * scaleFactor);
-            const dy = Math.round(latestDy * scaleFactor);
-
-            let newWidth = startSize.width;
-            let newHeight = startSize.height;
-            if (east) newWidth = startSize.width + dx;
-            if (west) newWidth = startSize.width - dx;
-            if (south) newHeight = startSize.height + dy;
-            if (north) newHeight = startSize.height - dy;
-            if (newWidth < minWidthPhysical) newWidth = minWidthPhysical;
-            if (newHeight < minHeightPhysical) newHeight = minHeightPhysical;
-
-            // 좌/상단 핸들은 반대쪽을 고정해야 하므로 위치도 함께 옮긴다.
-            let newX = startPos.x;
-            let newY = startPos.y;
-            if (west) newX = startPos.x + (startSize.width - newWidth);
-            if (north) newY = startPos.y + (startSize.height - newHeight);
-
-            try {
-              await w.setSize(new PhysicalSize(newWidth, newHeight));
-              if (west || north) {
-                await w.setPosition(new PhysicalPosition(newX, newY));
-              }
-            } catch (err) {
-              console.warn('Resize update failed:', err);
-            } finally {
-              pending = false;
-            }
-          };
-
-          const onMove = (ev: MouseEvent) => {
-            latestDx = ev.screenX - startScreenX;
-            latestDy = ev.screenY - startScreenY;
-            void apply();
-          };
-          const onUp = () => {
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-          };
-          window.addEventListener('mousemove', onMove);
-          window.addEventListener('mouseup', onUp);
-        } catch (err) {
-          console.warn('Failed to start edge resize:', err);
-        }
-      },
+    (direction: ResizeDirection) => async (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const w = await getCurrentTauriWindow();
+      if (!w) return;
+      try {
+        await w.startResizeDragging(direction);
+      } catch (err) {
+        console.warn('Failed to start edge resize:', err);
+      }
+    },
     [],
   );
 
@@ -1360,14 +1309,14 @@ export default function DashboardPage() {
   return (
     <main className="dashboard-page">
       <div className="widget-frame">
-        <div className="rsz rsz-n" onMouseDown={startEdgeResize('n')} aria-hidden="true" />
-        <div className="rsz rsz-s" onMouseDown={startEdgeResize('s')} aria-hidden="true" />
-        <div className="rsz rsz-w" onMouseDown={startEdgeResize('w')} aria-hidden="true" />
-        <div className="rsz rsz-e" onMouseDown={startEdgeResize('e')} aria-hidden="true" />
-        <div className="rsz rsz-nw" onMouseDown={startEdgeResize('nw')} aria-hidden="true" />
-        <div className="rsz rsz-ne" onMouseDown={startEdgeResize('ne')} aria-hidden="true" />
-        <div className="rsz rsz-sw" onMouseDown={startEdgeResize('sw')} aria-hidden="true" />
-        <div className="rsz rsz-se" onMouseDown={startEdgeResize('se')} aria-hidden="true" />
+        <div className="rsz rsz-n" onMouseDown={startEdgeResize('North')} aria-hidden="true" />
+        <div className="rsz rsz-s" onMouseDown={startEdgeResize('South')} aria-hidden="true" />
+        <div className="rsz rsz-w" onMouseDown={startEdgeResize('West')} aria-hidden="true" />
+        <div className="rsz rsz-e" onMouseDown={startEdgeResize('East')} aria-hidden="true" />
+        <div className="rsz rsz-nw" onMouseDown={startEdgeResize('NorthWest')} aria-hidden="true" />
+        <div className="rsz rsz-ne" onMouseDown={startEdgeResize('NorthEast')} aria-hidden="true" />
+        <div className="rsz rsz-sw" onMouseDown={startEdgeResize('SouthWest')} aria-hidden="true" />
+        <div className="rsz rsz-se" onMouseDown={startEdgeResize('SouthEast')} aria-hidden="true" />
         <div className="widget">
         <div className="hdr">
           <div className="hdr-top hdr-drag" onMouseDown={(e) => void startWindowDrag(e)}>
