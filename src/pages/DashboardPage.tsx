@@ -1238,58 +1238,103 @@ export default function DashboardPage() {
     { k: 'discarded', l: '폐기', n: summary.discarded },
   ];
 
-  const startTopResize = useCallback(async (e: React.MouseEvent) => {
+  // 창 위치 이동 — 타이틀 영역(헤더)을 드래그하면 OS 창 드래그를 시작한다.
+  // 버튼/입력 등 인터랙티브 요소 위에서 시작된 드래그는 무시한다.
+  const startWindowDrag = useCallback(async (e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    e.preventDefault();
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, a, .hdr-actions')) return;
     const w = await getCurrentTauriWindow();
     if (!w) return;
     try {
-      const dpiMod = await import('@tauri-apps/api/dpi');
-      const { PhysicalPosition, PhysicalSize } = dpiMod;
-      const startScreenY = e.screenY;
-      const [startPos, startSize, scaleFactor] = await Promise.all([
-        w.outerPosition(),
-        w.outerSize(),
-        w.scaleFactor(),
-      ]);
-      const minHeightPhysical = Math.round(320 * scaleFactor);
-      let pending = false;
-      let latestDy = 0;
-
-      const apply = async () => {
-        if (pending) return;
-        pending = true;
-        const dyPhysical = Math.round(latestDy * scaleFactor);
-        let newHeight = startSize.height - dyPhysical;
-        let newY = startPos.y + dyPhysical;
-        if (newHeight < minHeightPhysical) {
-          newHeight = minHeightPhysical;
-          newY = startPos.y + (startSize.height - minHeightPhysical);
-        }
-        try {
-          await w.setSize(new PhysicalSize(startSize.width, newHeight));
-          await w.setPosition(new PhysicalPosition(startPos.x, newY));
-        } catch (err) {
-          console.warn('Resize update failed:', err);
-        } finally {
-          pending = false;
-        }
-      };
-
-      const onMove = (ev: MouseEvent) => {
-        latestDy = ev.screenY - startScreenY;
-        void apply();
-      };
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-      };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+      await w.startDragging();
     } catch (err) {
-      console.warn('Failed to start top resize:', err);
+      console.warn('Failed to start window drag:', err);
     }
   }, []);
+
+  // 위젯(불투명 영역) 테두리에 맞춘 크기 조절 핸들. 투명 패딩이 아닌 흰색
+  // 위젯의 가장자리에서부터 리사이즈가 시작되도록 8방향 핸들을 직접 구현한다.
+  // (네이티브 리사이즈는 창 바깥쪽 투명 영역에서 동작해 인지되는 테두리와
+  // 어긋나므로, tauri.conf.json 에서 resizable:false 로 끄고 여기서 처리한다.)
+  const startEdgeResize = useCallback(
+    (dir: 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw') =>
+      async (e: React.MouseEvent) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const w = await getCurrentTauriWindow();
+        if (!w) return;
+        try {
+          const { PhysicalPosition, PhysicalSize } = await import('@tauri-apps/api/dpi');
+          const startScreenX = e.screenX;
+          const startScreenY = e.screenY;
+          const [startPos, startSize, scaleFactor] = await Promise.all([
+            w.outerPosition(),
+            w.outerSize(),
+            w.scaleFactor(),
+          ]);
+          const minWidthPhysical = Math.round(360 * scaleFactor);
+          const minHeightPhysical = Math.round(320 * scaleFactor);
+          const north = dir.includes('n');
+          const south = dir.includes('s');
+          const east = dir.includes('e');
+          const west = dir.includes('w');
+
+          let pending = false;
+          let latestDx = 0;
+          let latestDy = 0;
+
+          const apply = async () => {
+            if (pending) return;
+            pending = true;
+            const dx = Math.round(latestDx * scaleFactor);
+            const dy = Math.round(latestDy * scaleFactor);
+
+            let newWidth = startSize.width;
+            let newHeight = startSize.height;
+            if (east) newWidth = startSize.width + dx;
+            if (west) newWidth = startSize.width - dx;
+            if (south) newHeight = startSize.height + dy;
+            if (north) newHeight = startSize.height - dy;
+            if (newWidth < minWidthPhysical) newWidth = minWidthPhysical;
+            if (newHeight < minHeightPhysical) newHeight = minHeightPhysical;
+
+            // 좌/상단 핸들은 반대쪽을 고정해야 하므로 위치도 함께 옮긴다.
+            let newX = startPos.x;
+            let newY = startPos.y;
+            if (west) newX = startPos.x + (startSize.width - newWidth);
+            if (north) newY = startPos.y + (startSize.height - newHeight);
+
+            try {
+              await w.setSize(new PhysicalSize(newWidth, newHeight));
+              if (west || north) {
+                await w.setPosition(new PhysicalPosition(newX, newY));
+              }
+            } catch (err) {
+              console.warn('Resize update failed:', err);
+            } finally {
+              pending = false;
+            }
+          };
+
+          const onMove = (ev: MouseEvent) => {
+            latestDx = ev.screenX - startScreenX;
+            latestDy = ev.screenY - startScreenY;
+            void apply();
+          };
+          const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+          };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        } catch (err) {
+          console.warn('Failed to start edge resize:', err);
+        }
+      },
+    [],
+  );
 
   const handleSync = useCallback(async () => {
     if (syncing) return;
@@ -1314,14 +1359,18 @@ export default function DashboardPage() {
 
   return (
     <main className="dashboard-page">
-      <div
-        className="resize-top"
-        onMouseDown={(e) => void startTopResize(e)}
-        aria-hidden="true"
-      />
-      <div className="widget">
+      <div className="widget-frame">
+        <div className="rsz rsz-n" onMouseDown={startEdgeResize('n')} aria-hidden="true" />
+        <div className="rsz rsz-s" onMouseDown={startEdgeResize('s')} aria-hidden="true" />
+        <div className="rsz rsz-w" onMouseDown={startEdgeResize('w')} aria-hidden="true" />
+        <div className="rsz rsz-e" onMouseDown={startEdgeResize('e')} aria-hidden="true" />
+        <div className="rsz rsz-nw" onMouseDown={startEdgeResize('nw')} aria-hidden="true" />
+        <div className="rsz rsz-ne" onMouseDown={startEdgeResize('ne')} aria-hidden="true" />
+        <div className="rsz rsz-sw" onMouseDown={startEdgeResize('sw')} aria-hidden="true" />
+        <div className="rsz rsz-se" onMouseDown={startEdgeResize('se')} aria-hidden="true" />
+        <div className="widget">
         <div className="hdr">
-          <div className="hdr-top">
+          <div className="hdr-top hdr-drag" onMouseDown={(e) => void startWindowDrag(e)}>
             <div className="hdr-date">
               <div className="hdr-date-main">{formatTodayHeader(today)}</div>
               <div className="hdr-date-sub">
@@ -1550,6 +1599,7 @@ export default function DashboardPage() {
           </div>
         </div>
         )}
+        </div>
       </div>
 
       {parentPopup && (
