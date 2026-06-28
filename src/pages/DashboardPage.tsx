@@ -23,6 +23,7 @@ import type { Holiday, HolidayType, Schedule, Task, TaskStatus } from '../types'
 import MarkdownViewer from '../components/markdown/MarkdownViewer';
 import MarkdownEditor from '../components/markdown/MarkdownEditor';
 import { openDetailWindow } from '../lib/detailWindow';
+import { openCalendarWindow } from '../lib/calendarWindow';
 import './DashboardPage.css';
 
 type FilterKey = 'all' | 'active' | 'in_progress' | 'pending' | 'completed' | 'discarded';
@@ -1331,9 +1332,9 @@ export default function DashboardPage() {
               <button
                 type="button"
                 className="iconbtn"
-                onClick={() => void openFullApp('/calendar')}
-                aria-label="달력 전체화면 열기"
-                title="달력 전체화면 열기"
+                onClick={() => void openCalendarWindow()}
+                aria-label="달력 팝업 열기"
+                title="달력 팝업 열기 (대시보드 유지)"
               >
                 <CalendarIcon />
               </button>

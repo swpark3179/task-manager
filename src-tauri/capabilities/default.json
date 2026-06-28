@@ -6,7 +6,8 @@
     "main",
     "dashboard",
     "activity-report",
-    "detail-*"
+    "detail-*",
+    "calendar-popup"
   ],
   "permissions": [
     "core:default",
