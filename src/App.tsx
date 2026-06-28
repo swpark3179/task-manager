@@ -12,6 +12,7 @@ import SettingsPage from './pages/SettingsPage';
 import DashboardPage from './pages/DashboardPage';
 import ActivityReportPage from './pages/ActivityReportPage';
 import DetailPage from './pages/DetailPage';
+import CalendarPopupPage from './pages/CalendarPopupPage';
 import SyncBlocker from './components/common/SyncBlocker';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import { isMobilePlatform } from './lib/runtimeWindow';
@@ -53,6 +54,7 @@ function AppRoutes() {
       <Route path="/dashboard" element={isMobile ? <Navigate to="/" replace /> : <DashboardPage />} />
       <Route path="/activity-report" element={isMobile ? <Navigate to="/" replace /> : <ActivityReportPage />} />
       <Route path="/detail" element={<DetailPage />} />
+      <Route path="/calendar-popup" element={isMobile ? <Navigate to="/" replace /> : <CalendarPopupPage />} />
       <Route element={<AppShell />}>
         <Route path="/" element={<TodayPage />} />
         <Route path="/history/:date" element={<HistoryPage />} />
