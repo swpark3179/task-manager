@@ -14,6 +14,15 @@ on:
           - patch
           - none
 
+# Cargo 의존성 다운로드 안정화 설정 (모든 잡에 적용)
+# - HTTP/2 multiplexing 비활성화: Windows 러너에서 crates.io CDN과의
+#   HTTP/2 통신이 간헐적으로 끊기며 발생하는 "curl [55] / HTTP2 56" 오류 방지
+# - 네트워크 재시도 횟수 증가 및 git fetch는 시스템 git CLI 사용
+env:
+  CARGO_NET_RETRY: "10"
+  CARGO_HTTP_MULTIPLEXING: "false"
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+
 jobs:
   # =============================================
   # Prepare release version
@@ -83,6 +92,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install frontend dependencies
         run: npm install
 
@@ -131,6 +145,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
       - name: Setup Android NDK
         run: |
@@ -215,6 +234,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
       - name: Install frontend dependencies
         run: npm install
